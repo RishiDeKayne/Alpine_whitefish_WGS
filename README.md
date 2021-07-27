@@ -18,7 +18,7 @@ Scripts span the following analyses:
 - 5.3 Standard length
 6. parallel study
 - 6.1 PCA
-- - 6.2 Fst
+- 6.2 Fst
 - 6.3 CSS
 - 6.4 outlier analysis
 7. f4 statistics
