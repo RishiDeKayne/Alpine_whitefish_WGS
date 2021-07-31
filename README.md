@@ -1,5 +1,6 @@
 This repository contains all code associated with De-Kayne et al. XXXX
 
+Please see the Wiki here: https://github.com/RishiDeKayne/Alpine_whitefish_WGS/wiki for a more detailed overview of each script
 Scripts span the following analyses:
 
 0. Sequence processing and genotyping
