@@ -16,7 +16,6 @@
 #	5. GWAS
 #		- 5.1 Gill raker count
 #		- 5.2 Sex
-#		- 5.3 Standard length
 #	6. parallel study
 #		- 6.1 PCA
 #		- 6.2 Fst
