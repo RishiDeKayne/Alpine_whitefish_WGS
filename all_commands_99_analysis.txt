@@ -1,0 +1,1827 @@
+###This script contains commands run for the whole-genome analysis paper for whitefish De-Kayne et al. 
+
+#this script starts with the vcf file 99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz
+#this file has 14313952 SNPs
+
+#then the following analyses
+#	1. PCAs
+#		- 1.1 Full 99 dataset (without outgroups)
+#		- 1.2 Individual lakes
+#	2. RAxML
+#	3. Admixture
+#	4. Dsuites
+#		- 4.1 Large pelagic introgression?
+#		- 4.2 Profundal - C. profundus and C. nobilis introgression?
+#		- 4.3 C. acrinasus in Thun - does it have Thun alleles or just constance fish there?
+#	5. GWAS
+#		- 5.1 Gill raker count
+#		- 5.2 Sex
+#		- 5.3 Standard length
+#	6. parallel study
+#		- 6.1 PCA
+#		- 6.2 Fst
+#		- 6.3 CSS
+#		- 6.4 outlier analysis
+#	7. f4 statistics
+#	8. fixed differencesd
+#		- 8.1 profundus
+#		- 8.2 nobilis
+#	9. KEGG differences for fst outlier overlaps
+
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+##########################
+##########################
+#	1. PCAs
+##########################
+##########################
+
+#/cluster/scratch/rdekayne/99_reanalysis/PCAs
+
+##########################
+##1.1 start with whole-system PCA
+#/cluster/scratch/rdekayne/99_reanalysis/PCAs/all_99
+
+#first remove out-groups with list of outgroup individuals outgroups.txt to avoid distortion of PCA
+#0903
+#0904
+#0906
+#0911
+#0907
+#0908
+#0909
+#0910
+
+VCF_IN=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz
+VCF_OUT=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz
+vcftools --remove outgroups.txt --gzvcf $VCF_IN --recode --stdout | gzip -c > $VCF_OUT
+bcftools view -H $VCF_OUT | wc -l
+#14313952
+
+#now do PCA
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf $VCF_OUT --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out all99_filt_noout
+
+# prune and create pca
+plink --vcf $VCF_OUT --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract all99_filt_noout.prune.in \
+--make-bed --pca --out all99_filt_noout
+# 1133255
+
+#prepare vcf of just polymorphic loci
+#informative/polymorphic loci in Alpine whitefish
+#filter vcf to have max and min 2 alleles:
+VCF_IN=99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz
+VCF_OUT=99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz
+# set filters
+vcftools --gzvcf $VCF_IN \
+--min-alleles 2 --max-alleles 2 \
+--mac 1 \
+--recode --stdout | gzip -c > \
+$VCF_OUT
+
+#kept 9120498 out of a possible 14313952 Sites
+
+##########################
+#1.2 now PCA for each lake separately
+###1.1 start with whole-system PCA
+#use background file here /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv 
+#/cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes
+
+#Then write script to make lake-specific VCFs, do LD filtering with plink and then do PCA (in /cluster/scratch/rdekayne/chap3/lakepcas
+#first produce VCFs for each lake
+
+#split up background info for each file
+awk -F ',' '{print>$4}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv 
+
+#then make lakes directory and move subsetted individual lists into each
+for filename in *; do
+	mv "$filename" "$filename".txt
+	mkdir "$filename"
+	mv "$filename".txt "$filename"/ 
+	awk -F ',' '{print $1}' "$filename"/"$filename".txt > "$filename"/"$filename".indivlist
+	sed -i -e 's/^/0/' "$filename"/"$filename".indivlist
+done
+
+#then remove the weird lakes
+rm -r Lake
+rm -r Muddus/
+rm -r Schaalsee/
+rm -r Drewitzee/
+rm -r Lake\ Stechlin/
+
+ls */*.indivlist > lake.indivlists.txt
+ls -d */ > lakes.txt
+sed -i 's/\///g' lakes.txt
+
+##################################################################
+##this is the script:
+#!/bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+
+# define jobindex
+lake_numb=${LSB_JOBINDEX}
+# find individual name corresponding with the job index number in a file
+lake_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes | sed -n ${lake_numb}p)
+
+#and the same for the indivlist we will use to subset vcf
+lake_indivs=$(cat /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/lake.indivlists.txt | sed -n ${lake_numb}p)
+
+#and the start of the output dir which will be followed by the specific lake
+output_dir=/cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes
+
+#and VCF file
+VCF_FILE=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz
+
+# call subset vcf 
+vcftools --keep ${output_dir}/${lake_indivs} --gzvcf ${VCF_FILE} --recode --stdout | gzip -c > ${output_dir}/${lake_indivs}.vcf.gz
+
+#then run this to get lake specific vcfs
+bsub -n1 -W 10:00 -J "lakevcf[1-8]" -R "rusage[mem=10000]" < /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/subset_lake_vcfs.lsf
+
+##################################################################
+##now script to do plink LD filtering and PCA plotting
+#and calculate PCA
+#!/bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+
+# define jobindex
+lake_numb=${LSB_JOBINDEX}
+# find individual name corresponding with the job index number in a file
+lake_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/lakes.txt | sed -n ${lake_numb}p)
+
+#and the same for the indivlist we will use to subset vcf
+lake_indivs=$(cat /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/lake.indivlists.txt | sed -n ${lake_numb}p)
+
+#and the start of the output dir which will be followed by the specific lake
+output_dir=/cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes
+
+#and VCF file
+VCF_FILE=${output_dir}/${lake_indivs}.vcf.gz
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf $VCF_FILE --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out ${output_dir}/${lake_name}/${lake_name}_filt_noout
+
+# prune and create pca
+plink --vcf $VCF_FILE --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract ${output_dir}/${lake_name}/${lake_name}_filt_noout.prune.in \
+--make-bed --pca --out ${output_dir}/${lake_name}/${lake_name}_filt_noout
+
+#then run this to get lake specific vcfs
+bsub -n1 -W 4:00 -J "lakepca[1-8]" -R "rusage[mem=5000]" < /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/run_lake_plink_PCAs.lsf
+
+
+#####and run specific PCAs for lake systems in case these are needed (in /cluster/scratch/rdekayne/chap3/lakesystempcas)
+#mkdir lake_systems
+/cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/lake_systems
+#these include Thun+Brienz , Neuchatel+Biel and Zurich+Walen (in addition to Luzern, Constance and the outgroup lakes)
+mkdir ThunBrienz
+mkdir NeuenburgBiel
+mkdir ZurichWalen
+
+cat /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/Thun/Thun.indivlist /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/Brienz/Brienz.indivlist > ThunBrienz/ThunBrienz.indivlist
+cat /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/Neuenburg/Neuenburg.indivlist /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes//Biel/Biel.indivlist > NeuenburgBiel/NeuenburgBiel.indivlist
+cat /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/Zurich/Zurich.indivlist /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/Walen/Walen.indivlist > ZurichWalen/ZurichWalen.indivlist
+
+ls */*.indivlist > lake.indivlists.txt
+ls -d */ > lakes.txt
+sed -i 's/\///g' lakes.txt
+
+cp ../*.lsf .
+
+sed -i 's=/cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes=/cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/lake_systems=g' subset_lake_vcfs.lsf
+sed -i 's=/cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes=/cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/lake_systems=g' run_lake_plink_PCAs.lsf
+
+
+#then copy subset_lake_vcfs.lsf, alter paths and run
+bsub -n1 -W 4:00 -J "lakevcf[1-3]" -R "rusage[mem=10000]" < /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/lake_systems/subset_lake_vcfs.lsf
+
+#and the same for run pcas
+bsub -n1 -W 4:00 -J "lakepca[1-3]" -R "rusage[mem=5000]" < /cluster/scratch/rdekayne/99_reanalysis/PCAs/separate_lakes/lake_systems/run_lake_plink_PCAs.lsf
+
+##and download results for R script
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/PCAs/*/*/*.eigen* Dropbox/RishiMAC/99_reanalysis/PCAs/
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/PCAs/*/*/*/*.eigen* Dropbox/RishiMAC/99_reanalysis/PCAs/
+
+##########################
+##########################
+#	2. RAxML
+##########################
+##########################
+#first we should thin vcf file since so many snps so use vcftools --thin to make sure snps are at least 1000bp apart
+VCF_IN=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz
+VCF_OUT=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_1kbthinned.vcf.gz
+# set filters
+vcftools --gzvcf $VCF_IN --thin 1000 --recode --stdout | gzip -c > $VCF_OUT
+
+bcftools view -H $VCF_IN | wc -l
+#14313952
+
+bcftools view -H $VCF_OUT | wc -l
+#1181960
+
+#use 1kb thinned file from splitstree analysis since it only has 1.2million SNPs
+# apply additional filter for phylogeny: each site must have a homozygote of each allele
+bsub < runFilter_raxmlsites.lsf
+## runFilter_raxmlsites.lsf
+
+#BSUB -J "raxmlfilter"
+#BSUB -R "rusage[mem=8000]"
+#BSUB -W 24:00
+#BSUB -n 2
+#BSUB -o log.%J.%I
+#BSUB -e err.%J.%I
+# load required modules
+module load gcc/4.8.2 gdc perl/5.18.4 samtools/1.8
+source /cluster/apps/gdc/perl5/etc/bashrc
+# Filter high depth sites and masked regions
+bcftools view -i 'COUNT(GT="RR")>0 & COUNT(GT="AA")>0' \
+/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_1kbthinned.vcf.gz | \
+bgzip -c > all_raxmlinput.vcf.gz
+tabix -fp vcf all_raxmlinput.vcf.gz
+
+bcftools view -H all_raxmlinput.vcf.gz | wc -l
+#977526
+
+#then convert format
+#./vcf2phylip.py from https://github.com/edgardomortiz/vcf2phylip/blob/master/vcf2phylip.py
+bsub < runVCF2PHY.lsf
+## runVCF2PHY.lsf
+
+#BSUB -J "vcf2phy"
+#BSUB -R "rusage[mem=20000]"
+#BSUB -W 24:00
+#BSUB -n 1
+#BSUB -o log.%J.%I
+#BSUB -e err.%J.%I
+module load python/3.3.3
+./vcf2phylip.py -i all_raxmlinput.vcf.gz
+
+# Run RaxML with whole genome SNP data
+bsub < runRaxmlG.lsf
+## runRaxmlG.lsf
+
+#BSUB -J "raxmlG"
+#BSUB -R "rusage[mem=200]"
+#BSUB -W 120:00
+#BSUB -n 24
+#BSUB -R "select[nthreads==2]"
+module load gcc/4.8.2 gdc open_mpi/1.6.5 raxml/8.2.12
+raxmlHPC-HYBRID-AVX2 -m ASC_GTRGAMMA --asc-corr=lewis -n 99.GTRGAMMA.raxmlout -s all_raxmlinput.min4.phy -k -f a -x 12345 -p 12345 -N 100 -T 48 -o 0903,0904
+
+
+##also tried thinning by 500bp
+#/cluster/scratch/rdekayne/99_reanalysis/RAxML/RAxML500bp
+VCF_IN=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz
+VCF_OUT=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_500bpthinned.vcf.gz
+# set filters
+vcftools --gzvcf $VCF_IN --thin 500 --recode --stdout | gzip -c > $VCF_OUT
+
+bcftools view -H 99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_500bpthinned.vcf.gz | wc -l
+#2039744
+
+bcftools view -H all_raxmlinput.vcf.gz | wc -l
+#1692559
+
+##########################
+##########################
+#	3. Admixture
+##########################
+##########################
+#admixture analysis
+
+#installed as conda env. on the cluster
+source /cluster/project/gdc/shared/tools/miniconda/bin/activate admixture
+
+#need to number chroms correctly for analysis so:
+#use the file newchromnames_full.txt which has chromosomes named PGA... and then a number to be renamed as
+bcftools annotate --rename-chrs newchromnames_full.txt /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz | gzip -c > /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_renamed_chromosomes.vcf.gz
+
+#now do linkage filtering and PCA with plink so we get the .bed file we need for admixture
+
+VCF_FILE=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_renamed_chromosomes.vcf.gz
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf $VCF_FILE --double-id --autosome-num 40 \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out all99_filt_noout
+
+# prune and create pca
+plink --vcf $VCF_FILE --double-id --autosome-num 40 --set-missing-var-ids @:# \
+--extract all99_filt_noout.prune.in \
+--make-bed --pca --out all99_filt_noout
+# 
+
+#test
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0 
+source /cluster/project/gdc/shared/tools/miniconda/bin/activate admixture
+admixture all99_filt_noout.bed 5
+
+#!/bin/bash
+#BSUB -J "Admixture"
+#BSUB -R "rusage[mem=2000]"
+#BSUB -n 4
+#BSUB -W 48:00
+
+source /cluster/project/gdc/shared/tools/miniconda/bin/activate admixture
+
+for K in {2..14}
+do 
+admixture --cv=20 -j8 all99_filt_noout.bed ${K} | tee log${K}_all99_filt_noout.out
+done
+
+
+##########################
+##########################
+#	4. Dstats
+##########################
+##########################
+
+#to prepare input we need a list of individuals and then a column with the population
+#for this run each individual will be its own population so we can identify outliers
+
+#first subset background file to get this
+awk -F',' '{print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | tail -n+2 > samples.txt
+printf '0\n%.0s' {1..99} > zeros.txt
+
+paste zeros.txt samples.txt > samples0.txt
+sed -i 's/\t//g' samples0.txt
+
+awk -F',' '{print $3"_"$4"_"$5}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | tail -n+2 > background.txt
+paste samples0.txt background.txt > samples0_background.txt
+sed -i 's/\t/_/g' samples0_background.txt
+
+paste samples0.txt samples0_background.txt > dsuites_input.txt
+
+#convert outgroups to 'outgroup' population
+sed -i 's/Lake Stechlin/Outgroup/g' dsuites_input.txt
+sed -i 's/Drewitzee/Outgroup/g' dsuites_input.txt
+sed -i 's/Schaalsee/Outgroup/g' dsuites_input.txt
+sed -i 's/Muddus/Outgroup/g' dsuites_input.txt
+
+sed -i 's/0903_C.albula_Outgroup_Alb06/Outgroup/g' dsuites_input.txt
+sed -i 's/0904_C.albula_Outgroup_Alb10/Outgroup/g' dsuites_input.txt
+sed -i 's/0906_C.holsatus_Outgroup_GM02A/Outgroup/g' dsuites_input.txt
+sed -i 's/0911_C.holsatus_Outgroup_GM07A/Outgroup/g' dsuites_input.txt
+sed -i 's/0907_C.maraeonoides_Outgroup_GM21A/Outgroup/g' dsuites_input.txt
+sed -i 's/0908_C.maraeonoides_Outgroup_GM22A/Outgroup/g' dsuites_input.txt
+sed -i 's/0909_C.lavaretus_Outgroup_ML1/Outgroup/g' dsuites_input.txt
+sed -i 's/0910_C.lavaretus_Outgroup_ML2/Outgroup/g' dsuites_input.txt
+
+#extract chromosome name list
+awk -F'\t' '{print $1}' /cluster/scratch/rdekayne/99_reanalysis/Admixture/newchromnames_full.txt > chrom.list
+
+########
+#now we have a script which subsets the vcf into choromsome vcfs: extract_chrom_vcfs.lsf
+#!/bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+
+# define jobindex
+chrom_numb=${LSB_JOBINDEX}
+# find individual name corresponding with the job index number in a file
+chrom_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/Dstats/chrom.list | sed -n ${chrom_numb}p)
+
+#and the start of the output dir which will be followed by the specific lake
+output_dir=/cluster/scratch/rdekayne/99_reanalysis/Dstats/chromosome_vcfs
+
+#and VCF file
+VCF_FILE=/cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz
+
+# call subset vcf
+vcftools --chr ${chrom_name} --gzvcf ${VCF_FILE} --recode --stdout | gzip -c > ${output_dir}/${chrom_name}.vcf.gz
+
+#then run extract_chrom_vcfs.lsf for all - hope that chromosomes not present are automatically excluded
+bsub -n1 -W 4:00 -J "chr_ext[1-40]%10" -R "rusage[mem=5000]" < /cluster/scratch/rdekayne/99_reanalysis/Dstats/extract_chrom_vcfs.lsf
+
+#######
+#now a script to run the Dstats in a loop
+!/bin/bash
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+# define jobindex
+chrom_numb=${LSB_JOBINDEX}
+# find individual name corresponding with the job index number in a file
+chrom_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/Dstats/chrom.list | sed -n ${chrom_numb}p)
+
+#and the start of the output dir which will be followed by the specific lake
+output_dir=/cluster/scratch/rdekayne/99_reanalysis/Dstats/
+
+# call dsuites tiros
+/cluster/scratch/rdekayne/Dsuite/Build/Dsuite Dtrios -n ${chrom_name} /cluster/scratch/rdekayne/99_reanalysis/Dstats/chromosome_vcfs/${chrom_name}.vcf.gz dsuites_input.txt
+
+bsub -n1 -W 4:00 -J "chr_ext[1-40]%15" -R "rusage[mem=3000]" < /cluster/scratch/rdekayne/99_reanalysis/Dstats/run_Dsuites_on_chromosomes.lsf 
+
+now remove the full chromosomes that are collapsed andshould be empty
+rm *PGA_scaffold21__417_contigs__length_56862223*.txt
+rm *PGA_scaffold27__289_contigs__length_46671285*.txt
+rm *PGA_scaffold31__196_contigs__length_44616205*.txt
+rm *PGA_scaffold34__308_contigs__length_42609905*.txt
+rm *PGA_scaffold37__332_contigs__length_36774138*.txt
+
+#now merge output from all chromosomes (35/40)
+#combine data from all chromosomes:
+bsub -n 1 -W 4:00 -R "rusage[mem=5000]" "module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0; /cluster/scratch/rdekayne/Dsuite/Build/Dsuite DtriosCombine \
+dsuites_input_PGA_scaffold0__352_contigs__length_93459789 dsuites_input_PGA_scaffold10__182_contigs__length_63177489 dsuites_input_PGA_scaffold11__203_contigs__length_63881516 dsuites_input_PGA_scaffold1__210_contigs__length_43329510 dsuites_input_PGA_scaffold12__167_contigs__length_57740044 dsuites_input_PGA_scaffold13__147_contigs__length_47256133 dsuites_input_PGA_scaffold14__173_contigs__length_55641933 dsuites_input_PGA_scaffold15__168_contigs__length_54025139 dsuites_input_PGA_scaffold16__334_contigs__length_54216998 dsuites_input_PGA_scaffold17__183_contigs__length_51949489 dsuites_input_PGA_scaffold18__164_contigs__length_59907985 dsuites_input_PGA_scaffold19__147_contigs__length_54335267 dsuites_input_PGA_scaffold20__181_contigs__length_52945597 dsuites_input_PGA_scaffold2__176_contigs__length_42764345 dsuites_input_PGA_scaffold22__199_contigs__length_52020451 dsuites_input_PGA_scaffold23__167_contigs__length_50329371 dsuites_input_PGA_scaffold24__152_contigs__length_51033154 dsuites_input_PGA_scaffold25__179_contigs__length_50922480 dsuites_input_PGA_scaffold26__192_contigs__length_48683376 dsuites_input_PGA_scaffold28__172_contigs__length_48977775 dsuites_input_PGA_scaffold29__157_contigs__length_48675208 dsuites_input_PGA_scaffold30__165_contigs__length_48446552 dsuites_input_PGA_scaffold32__183_contigs__length_44662967 dsuites_input_PGA_scaffold33__143_contigs__length_40727438 dsuites_input_PGA_scaffold3__454_contigs__length_92224161 dsuites_input_PGA_scaffold35__141_contigs__length_42009912 dsuites_input_PGA_scaffold36__136_contigs__length_43663377 dsuites_input_PGA_scaffold38__206_contigs__length_33962415 dsuites_input_PGA_scaffold39__3_contigs__length_1094305 dsuites_input_PGA_scaffold4__243_contigs__length_45591172 dsuites_input_PGA_scaffold5__223_contigs__length_43692974 dsuites_input_PGA_scaffold6__535_contigs__length_65391737 dsuites_input_PGA_scaffold7__351_contigs__length_68138733 dsuites_input_PGA_scaffold8__181_contigs__length_65193448 dsuites_input_PGA_scaffold9__196_contigs__length_60468309"
+
+mkdir output
+mv dsuites_input_PGA* output/
+
+######then process output - we want to be able to compare 
+#4.1 excess allele sharing from Constance in Luzern - specifically pelagic intermediate RE: large pelagic introgression
+awk '$1 ~ /Lucerne/ { print }' ./combined_Dmin.txt | awk '$2 ~ /Lucerne/ { print }' | awk '$3 ~ /Constance/ { print }' > Luzern_filt.txt 
+cat Luzern_filt.txt  | tr "\\t" "," > Luzern_filt.csv
+
+#4.2 does excess allele sharing explain admixture pattern of C. profundus in Thun or C. nobilis in Luzern
+awk '$1 ~ /Thun/ { print }' ./combined_Dmin.txt | awk '$2 ~ /Thun/ { print }' | awk '$3 ~ /Constance/ { print }' > Thun_filt.txt 
+cat Thun_filt.txt  | tr "\\t" "," > Thun_filt.csv
+
+awk '$1 ~ /Thun/ { print }' ./combined_Dmin.txt | awk '$2 ~ /Thun/ { print }' | awk '$3 ~ /Biel/ { print }' > ThunvsBiel_filt.txt 
+cat ThunvsBiel_filt.txt  | tr "\\t" "," > ThunvsBiel_filt.csv
+
+awk '$1 ~ /Thun/ { print }' ./combined_Dmin.txt | awk '$2 ~ /Thun/ { print }' | awk '$3 ~ /Neuenburg/ { print }' > ThunvsNeuchatel_filt.txt 
+cat ThunvsNeuchatel_filt.txt  | tr "\\t" "," > ThunvsNeuchatel_filt.csv
+cat ThunvsBiel_filt.csv ThunvsNeuchatel_filt.csv > ThunvsBielNeuchatel.csv
+
+awk '$1 ~ /Lucerne/ { print }' ./combined_Dmin.txt | awk '$2 ~ /Lucerne/ { print }' | awk '$3 ~ /C.albellus/ { print }' > LuzernvsAlbellus_filt.txt 
+cat LuzernvsAlbellus_filt.txt  | tr "\\t" "," > LuzernvsAlbellus_filt.csv
+
+#4.3 can we confirm admixture from thun in the C. acrinasus in Thun (Placed with constance) i.e. show it has recieved genes
+#want P1 and P2 to be acrinasus or macrophthalmus/arenicolus and P3 to be Thun - profundus
+
+awk '$1 ~ /acrinasus/ { print }' ./combined_Dmin.txt | awk '$2 ~ /Constance/ { print }' | awk '$3 ~ /Thun/ { print }' > acrinasus_Con_Thun_filt.txt 
+awk '$1 ~ /Constance/ { print }' ./combined_Dmin.txt | awk '$2 ~ /acrinasus/ { print }' | awk '$3 ~ /Thun/ { print }' > Con_acrinasus_Thun_filt.txt 
+
+#combine
+cat acrinasus_Con_Thun_filt.txt Con_acrinasus_Thun_filt.txt > acr_con_thun_filt_all.txt
+
+#remove topologies with wartmanni and profundus
+grep -v "profundus" acr_con_thun_filt_all.txt > acr_con_thun_filt_all_noprof.txt
+
+cat acr_con_thun_filt_all_noprof.txt | tr "\\t" "," > acr_con_thun_filt_all_noprof.csv
+
+#and get background plot so constance/constance/thun
+awk '$1 ~ /Constance/ { print }' ./combined_Dmin.txt | awk '$2 ~ /Constance/ { print }' | awk '$3 ~ /Thun/ { print }' > Con_Con_Thun_filt.txt 
+#remove topologies with wartmanni 
+grep -v "profundus" Con_Con_Thun_filt.txt > Con_Con_Thun_filt_noprof.txt 
+
+cat Con_Con_Thun_filt_noprof.txt  | tr "\\t" "," > Con_Con_Thun_filt_noprof.csv
+
+#and download  acr_con_thun_filt_all_noprof.csv and Con_Con_Thun_filt_noprof.csv
+
+##########################
+##########################
+#	5. GWAS
+##########################
+##########################
+#		- 5.1 Gill raker count
+#		- 5.2 Sex
+#		- 5.3 Standard length
+		
+###5.1 gill raker count
+#/cluster/scratch/rdekayne/99_reanalysis/GWAS_poly
+#first filter vcf file to remove individuals with missing gill raker counts $9 = "missing"
+awk -F "," '$9 ~ /missing/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv > remove_gill_raker.txt
+sed -i 's/^/0/g' remove_gill_raker.txt
+
+#now filter vcf to remove individuals in remove_gill_raker.txt
+vcftools --remove remove_gill_raker.txt --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --recode --stdout | gzip -c > GR_no_missing.vcf.gz
+
+#rename chromosomes
+bcftools annotate --rename-chrs chrom.map GR_no_missing.vcf.gz | bgzip > GR_no_missing_renamed.vcf.gz
+
+#now convert vcf to .tped and produce basic .tfam
+plink --vcf GR_no_missing_renamed.vcf.gz --recode 12 transpose --output-missing-genotype 0 --allow-extra-chr --chr-set 41 --out emmax_GR_plink
+
+#and get pheno file from background_2021_full
+awk -F "," '$9 !~ /missing/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | tail -n+2 > names.txt
+sed -i 's/^/0/g' names.txt
+
+awk -F "," '$9 !~ /missing/ {print $9}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | tail -n+2 > pre_pheno.txt
+
+paste names.txt names.txt pre_pheno.txt > pheno_unordered.txt
+
+#then want to sort so they have the same order as other files
+#this command adds line number from file 2: emmax_plink.tfam as an extra column in file 1 pre_pheno.txt, then sorts and cuts off column
+awk 'FNR == NR { lineno[$1] = NR; next}
+     {print lineno[$1], $0;}' emmax_GR_plink.tfam pheno_unordered.txt | sort -k 1,1n | cut -d' ' -f2- > emmax_association_input_GR.pheno
+
+#now run kinmatrix 
+
+bsub < run_emmax_nm_kin.lsf
+
+#!/bin/bash
+#BSUB -J "emmax_kin"
+#BSUB -R "rusage[mem=10000]"
+#BSUB -n 2
+#BSUB -W 4:00
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools/1.8 vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+/cluster/project/gdc/shared/tools/emmax-20120210/emmax-kin -v -d 10 emmax_GR_plink 
+
+
+#then run emmax association study
+bsub < run_emmax_assocication.lsf
+
+#!/bin/bash
+#BSUB -J "emmax_run"
+#BSUB -R "rusage[mem=10000]"
+#BSUB -n 2
+#BSUB -W 4:00
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools/1.8 vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+/cluster/project/gdc/shared/tools/emmax-20120210/emmax -v -d 10 -t emmax_GR_plink -p emmax_association_input_GR.pheno -k emmax_GR_plink.aBN.kinf -o out_emmax_GR
+
+#and parse output
+#first look at max output
+min=`awk 'BEGIN{a=1000}{if ($4<0+a) a=$4} END{print a}' out_emmax_GR.ps` ; echo $min
+#-log10(7.965031673e-09)
+#8.09881249288
+
+zgrep -v "^##" GR_no_missing.vcf.gz | cut -f1-2 | tail -n +2 > snp_names.txt
+wc -l snp_names.txt 
+#9120498 snp_names.txt
+
+cp out_emmax_GR.ps out_no_snp_names.txt
+
+cat out_no_snp_names.txt | cut -f4 > out_no_snp_names_p_values.txt
+
+paste snp_names.txt out_no_snp_names_p_values.txt > emmax_SNP_pvalue_output.txt
+
+min=`awk 'BEGIN{a=1000}{if ($3<0+a) a=$3} END{print a}' emmax_SNP_pvalue_output.txt` ; echo $min
+#7.965031673e-09
+
+grep "7.965031673e-09" emmax_SNP_pvalue_output.txt
+#PGA_scaffold22__199_contigs__length_52020451	30197713	7.965031673e-09
+
+#remove lines with pvalue = 1 to make smaller file
+awk '{if($3 < 1){print}}' emmax_SNP_pvalue_output.txt > emmax_GR_SNP_pvalue_output_not1.txt
+awk '{if($3 < 0.5){print}}' emmax_SNP_pvalue_output.txt > emmax_GR_SNP_pvalue_output_not0.5.txt
+awk '{if($3 < 0.05){print}}' emmax_SNP_pvalue_output.txt > emmax_GR_SNP_pvalue_output_not0.05.txt
+
+
+# determine p value cuttoff if we consider linkage disequlibrium
+#now do PCA
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf GR_no_missing.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.95 --out GRC_filt_noout
+#4583583 of 9120498 variants removed.
+
+
+plink --vcf ../GR_no_missing.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.90 --out GRC_filt_noout
+#get significance threshold:
+#strict --
+-log10(0.05/4536915)
+7.95779063841
+
+#filter out the outliers:
+awk '{if($3 < 1.10207046e-8){print}}' emmax_GR_SNP_pvalue_output_not0.5.txt > outlier_peak_scaff22.txt
+
+#now we want to calculate the allele frequencies for these SNPs in each comparison:
+awk -F "," '$7 ~ /balchen/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | sed 's/^/0/g' > balchen.txt
+awk -F "," '$7 ~ /albeli/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | sed 's/^/0/g' > albeli.txt
+awk -F "," '$7 ~ /felchen/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | sed 's/^/0/g' > felchen.txt
+awk -F "," '$7 ~ /large_pelagic/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | sed 's/^/0/g' > large_pel.txt
+awk -F "," '$7 ~ /benthic_profundal/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | sed 's/^/0/g' > benth_prof.txt
+awk -F "," '$7 ~ /pelagic_profundal/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | sed 's/^/0/g' > pel_prof.txt
+
+#balchen
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions outlier_peak_scaff22.txt --keep balchen.txt --freq --out balchen_freq
+#32 individuals
+
+#albeli
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions outlier_peak_scaff22.txt --keep albeli.txt --freq --out albeli_freq
+#19 individuals
+
+#felchen
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions outlier_peak_scaff22.txt --keep felchen.txt --freq --out felchen_freq
+#23 individuals
+
+#large pelagic
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions outlier_peak_scaff22.txt --keep large_pel.txt --freq --out largepel_freq
+#11 individuals
+
+#benthic profundal
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions outlier_peak_scaff22.txt --keep benth_prof.txt --freq --out benth_prof_freq
+#3 individuals
+
+#pelagic profundal
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions outlier_peak_scaff22.txt --keep pel_prof.txt --freq --out pel_prof_freq
+#3 individuals
+
+mkdir frequencies
+mv *_freq.* ./frequencies
+
+#find overlap with bedtools to find annotations which fit within windows
+#highest_snps.bed
+PGA_scaffold22__199_contigs__length_52020451	30197713	30197713
+    
+cp /cluster/scratch/rdekayne/David_work/genes_in_selected_regions/scaffoldannotation2.bed .
+bedtools intersect -a highest_snps.bed \
+    -b ./scaffoldannotation2.bed -wa -wb > outlier_highest_snps_notmerged.bed
+    
+#maker-PGA_scaffold22__199_contigs__length_52020451-snap-gene-302.9
+grep -A1 "maker-PGA_scaffold22__199_contigs__length_52020451-snap-gene-302.9" /cluster/work/gdc/shared/p618/Rishi/GenomeProject/GenomeAnnotation_extrafiles/all.maker.proteins.fasta
+#>maker-PGA_scaffold22__199_contigs__length_52020451-snap-gene-302.9-mRNA-1 protein AED:0.23 eAED:0.23 QI:0|0.77|0.6|1|0.88|1|10|0|449
+#TLSSCQPCPPCQPGQEPHMNCGYGTKDEDFVCVSCPAGKYSKGKYEICRRHKDCEGLYRA
+
+##edar gene - development
+
+#get variance explained by most associated snp:
+#get beta and se(beta) from emmax output
+paste snp_names.txt out_no_snp_names.txt > all_emmax_output.txt
+grep "30197713" all_emmax_output.txt
+#PGA_scaffold22__199_contigs__length_52020451	30197713	.	3.654445661	0.5726813521	7.965031673e-09
+
+#and to get MAF for snp of interest do vcftools --freq
+vcftools --gzvcf GR_no_missing.vcf.gz --positions outlier_peak_scaff22.txt --freq --out scaff22_freq
+
+#now use these in R script
+
+################################
+repeat allele frequencies but within each lake:
+####luzern
+awk -F "," '$7 ~ /balchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Lucerne/ {print $1}' | sed 's/^/0/g' > balchen_l.txt
+awk -F "," '$7 ~ /albeli/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Lucerne/ {print $1}' | sed 's/^/0/g' > albeli_l.txt
+awk -F "," '$7 ~ /felchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Lucerne/ {print $1}' | sed 's/^/0/g' > felchen_l.txt
+awk -F "," '$7 ~ /large_pelagic/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Lucerne/ {print $1}' | sed 's/^/0/g' > large_pel_l.txt
+awk -F "," '$7 ~ /pelagic_profundal/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Lucerne/ {print $1}' | sed 's/^/0/g' > pel_prof_l.txt
+
+#balchen 114, 118, 119
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep balchen_l.txt --freq --out balchen_l
+
+#albeli 110, 111, 113
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep albeli_l.txt --freq --out albeli_l
+
+#felchen 47 50, 66, 68, 70
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep felchen_l.txt --freq --out felchen_l
+
+#large pelagic 48, 107, 108, 109
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep large_pel_l.txt --freq --out large_pel_l
+
+#pelagic profundal 103, 104, 106
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep pel_prof_l.txt --freq --out pel_prof_l
+
+ls *.frq > files.txt
+cat *.frq > all.frq 
+sed -n 'n;p' all.frq > all.filt.frq
+paste files.txt all.filt.frq > luzern.frq.out
+
+####thun
+awk -F "," '$7 ~ /balchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Thun/ {print $1}' | sed 's/^/0/g' > balchen_TB.txt
+awk -F "," '$7 ~ /albeli/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Thun/ {print $1}' | sed 's/^/0/g' > albeli_TB.txt
+awk -F "," '$7 ~ /felchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Thun/ {print $1}' | sed 's/^/0/g' > felchen_TB.txt
+awk -F "," '$7 ~ /large_pelagic/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Thun/ {print $1}' | sed 's/^/0/g' > large_pel_TB.txt
+awk -F "," '$7 ~ /benthic_profundal/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Thun/ {print $1}' | sed 's/^/0/g' > benth_prof_TB.txt
+
+#balchen 16, 17, 19, 129, 999, 56, 58, 59
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep balchen_TB.txt --freq --out balchen_TB
+
+#albeli  61, 63, 64
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep albeli_TB.txt --freq --out albeli_TB
+
+#felchen 21, 22, 23
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep felchen_TB.txt --freq --out felchen_TB
+
+#large pelagic 12, 13, 14
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep large_pel_TB.txt --freq --out large_pel_TB
+
+#benthic profundal 26, 27, 29
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep benth_prof_TB.txt --freq --out benth_prof_TB
+
+ls *.frq > files.txt
+cat *.frq > all.frq 
+sed -n 'n;p' all.frq > all.filt.frq
+paste files.txt all.filt.frq > thun.frq.out
+
+####brienz
+
+awk -F "," '$7 ~ /balchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Brienz/ {print $1}' | sed 's/^/0/g' > balchen_B.txt
+awk -F "," '$7 ~ /albeli/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Brienz/ {print $1}' | sed 's/^/0/g' > albeli_B.txt
+awk -F "," '$7 ~ /felchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Brienz/ {print $1}' | sed 's/^/0/g' > felchen_B.txt
+
+#balchen 93, 136, 137
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep balchen_B.txt --freq --out balchen_B
+
+#albeli 32, 33, 34,
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep albeli_B.txt --freq --out albeli_B
+
+#felchen 38, 39, 40, 51, 53, 134, 55
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep felchen_B.txt --freq --out felchen_B
+
+ls *.frq > files.txt
+cat *.frq > all.frq 
+sed -n 'n;p' all.frq > all.filt.frq
+paste files.txt all.filt.frq > brienz.frq.out
+
+####zurich
+awk -F "," '$7 ~ /balchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Zurich/ {print $1}' | sed 's/^/0/g' > balchen_Z.txt
+awk -F "," '$7 ~ /albeli/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Zurich/ {print $1}' | sed 's/^/0/g' > albeli_Z.txt
+awk -F "," '$7 ~ /felchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Zurich/ {print $1}' | sed 's/^/0/g' > felchen_Z.txt
+
+#balchen 94, 95, 96
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep balchen_Z.txt --freq --out balchen_Z
+
+#albeli 101
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep albeli_Z.txt --freq --out albeli_Z
+
+#felchen 102, 97, 98, 99, 100
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep felchen_Z.txt --freq --out felchen_Z
+
+ls *.frq > files.txt
+cat *.frq > all.frq 
+sed -n 'n;p' all.frq > all.filt.frq
+paste files.txt all.filt.frq > zurich.frq.out
+
+#walen
+awk -F "," '$7 ~ /balchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Walen/ {print $1}' | sed 's/^/0/g' > balchen_W.txt
+awk -F "," '$7 ~ /albeli/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Walen/ {print $1}' | sed 's/^/0/g' > albeli_W.txt
+
+#balchen 76, 78, 79, 86, 87, 90
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep balchen_W.txt --freq --out balchen_W
+
+#albeli 81, 82, 83,
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep albeli_W.txt --freq --out albeli_W
+
+ls *.frq > files.txt
+cat *.frq > all.frq 
+sed -n 'n;p' all.frq > all.filt.frq
+paste files.txt all.filt.frq > walen.frq.out
+
+####biel
+awk -F "," '$7 ~ /balchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Biel/ {print $1}' | sed 's/^/0/g' > balchen_B.txt
+awk -F "," '$7 ~ /albeli/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Biel/ {print $1}' | sed 's/^/0/g' > albeli_B.txt
+
+#balchen 6, 7, 10
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep balchen_B.txt --freq --out balchen_B
+
+#albeli 2, 3, 5
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep albeli_B.txt --freq --out albeli_B
+
+ls *.frq > files.txt
+cat *.frq > all.frq 
+sed -n 'n;p' all.frq > all.filt.frq
+paste files.txt all.filt.frq > biel.frq.out
+
+#neuchatel
+awk -F "," '$7 ~ /balchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Neuenburg/ {print $1}' | sed 's/^/0/g' >> balchen_N.txt
+awk -F "," '$7 ~ /albeli/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Neuenburg/ {print $1}' | sed 's/^/0/g' >> albeli_N.txt
+
+#balchen 71, 72, 74
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep balchen_N.txt --freq --out balchen_N
+
+#albeli 41, 43, 44
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep albeli_N.txt --freq --out albeli_N
+
+ls *.frq > files.txt
+cat *.frq > all.frq 
+sed -n 'n;p' all.frq > all.filt.frq
+paste files.txt all.filt.frq > neuchatel.frq.out
+
+#constance
+awk -F "," '$7 ~ /balchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Constance/ {print $1}' | sed 's/^/0/g' >> balchen_C.txt
+awk -F "," '$7 ~ /felchen/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Constance/ {print $1}' | sed 's/^/0/g' >> felchen_C.txt
+awk -F "," '$7 ~ /large_pelagic/ {print $0}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | awk -F "," '$4 ~ /Constance/ {print $1}' | sed 's/^/0/g' >> large_pel_C.txt
+
+#balchen 126, 127, 128
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep balchen_C.txt --freq --out balchen_C
+
+#felchen 132, 123458, 123470
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep felchen_C.txt --freq --out felchen_C
+
+#large pelagic 131, 121, 122, 123
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --positions ../../outlier_peak_scaff22.txt --keep large_pel_C.txt --freq --out large_pel_C
+
+ls *.frq > files.txt
+cat *.frq > all.frq 
+sed -n 'n;p' all.frq > all.filt.frq
+paste files.txt all.filt.frq > constance.frq.out
+
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/GWAS_poly/gill_raker/lake_allele_frequencies/*/*.frq.out .
+
+###########################################################
+###5.2 sex
+#first filter vcf file to remove individuals with missing gill raker counts $13 = "missing"
+awk -F "," '$13 ~ /missing/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv > remove_sex.txt
+sed -i 's/^/0/g' remove_sex.txt
+
+#now filter vcf to remove individuals in remove_gill_raker.txt
+vcftools --remove remove_sex.txt --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz --recode --stdout | gzip -c > sex_no_missing.vcf.gz
+
+#rename chromosomes
+bcftools annotate --rename-chrs chrom.map sex_no_missing.vcf.gz | bgzip > sex_no_missing_renamed.vcf.gz
+
+#now convert vcf to .tped and produce basic .tfam
+plink --vcf sex_no_missing_renamed.vcf.gz --recode 12 transpose --output-missing-genotype 0 --allow-extra-chr --chr-set 41 --out emmax_sex_plink
+
+#and get pheno file from background_2021_full
+awk -F "," '$13 !~ /missing/ {print $1}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | tail -n+2 > names.txt
+sed -i 's/^/0/g' names.txt
+
+awk -F "," '$13 !~ /missing/ {print $13}' /cluster/scratch/rdekayne/99_reanalysis/background_2021_99.csv | tail -n+2 > pre_pheno.txt
+
+paste names.txt names.txt pre_pheno.txt > pheno_unordered.txt
+
+#then want to sort so they have the same order as other files
+#this command adds line number from file 2: emmax_plink.tfam as an extra column in file 1 pre_pheno.txt, then sorts and cuts off column
+awk 'FNR == NR { lineno[$1] = NR; next}
+     {print lineno[$1], $0;}' emmax_sex_plink.tfam pheno_unordered.txt | sort -k 1,1n | cut -d' ' -f2- > emmax_association_input_sex.pheno
+
+#now make male or m a 1 and female or f a 2
+sed -i 's/m/1/g' emmax_association_input_sex.pheno
+sed -i 's/f/2/g' emmax_association_input_sex.pheno
+
+#now run kinmatrix 
+
+bsub < run_emmax_nm_kin.lsf
+
+#!/bin/bash
+#BSUB -J "emmax_kin"
+#BSUB -R "rusage[mem=10000]"
+#BSUB -n 2
+#BSUB -W 4:00
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools/1.8 vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+/cluster/project/gdc/shared/tools/emmax-20120210/emmax-kin -v -d 10 emmax_sex_plink 
+
+
+#then run emmax association study
+bsub < run_emmax_assocication.lsf
+
+#!/bin/bash
+#BSUB -J "emmax_run"
+#BSUB -R "rusage[mem=10000]"
+#BSUB -n 2
+#BSUB -W 4:00
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools/1.8 vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+/cluster/project/gdc/shared/tools/emmax-20120210/emmax -v -d 10 -t emmax_sex_plink -p emmax_association_input_sex.pheno -k emmax_sex_plink.aBN.kinf -o out_emmax_sex
+
+#and parse output
+#first look at max output
+min=`awk 'BEGIN{a=1000}{if ($4<0+a) a=$4} END{print a}' out_emmax_sex.ps` ; echo $min
+#1.171142961e-16 
+
+cp ../gill_raker/snp_names.txt .
+wc -l snp_names.txt 
+# 9120498 snp_names.txt
+
+cp out_emmax_sex.ps out_no_snp_names.txt
+
+cat out_no_snp_names.txt | cut -f4 > out_no_snp_names_p_values.txt
+
+paste snp_names.txt out_no_snp_names_p_values.txt > emmax_SNP_pvalue_output.txt
+
+min=`awk 'BEGIN{a=1000}{if ($3<0+a) a=$3} END{print a}' emmax_SNP_pvalue_output.txt` ; echo $min
+
+#remove lines with pvalue = 1 to make smaller file
+awk '{if($3 < 1){print}}' emmax_SNP_pvalue_output.txt > emmax_sex_SNP_pvalue_output_not1.txt
+awk '{if($3 < 0.5){print}}' emmax_SNP_pvalue_output.txt > emmax_sex_SNP_pvalue_output_not0.5.txt
+awk '{if($3 < 0.05){print}}' emmax_SNP_pvalue_output.txt > emmax_sex_SNP_pvalue_output_not0.05.txt
+
+#filter out the outliers:
+awk '{if($3 < 1.10207046e-8){print}}' emmax_sex_SNP_pvalue_output_not0.5.txt | grep "scaffold3" > outlier_peak_scaff3.txt
+
+#highest_snps.bed
+PGA_scaffold3__454_contigs__length_92224161	55172846	55172846
+PGA_scaffold3__454_contigs__length_92224161	55172847	55172847
+PGA_scaffold3__454_contigs__length_92224161	55172848	55172848
+PGA_scaffold3__454_contigs__length_92224161	55172884	55172884
+PGA_scaffold3__454_contigs__length_92224161	55172917	55172917
+PGA_scaffold3__454_contigs__length_92224161	55172951	55172951
+PGA_scaffold3__454_contigs__length_92224161	55173047	55173047
+PGA_scaffold3__454_contigs__length_92224161	55173092	55173092
+PGA_scaffold3__454_contigs__length_92224161	55173190	55173190
+PGA_scaffold3__454_contigs__length_92224161	55173196	55173196
+PGA_scaffold3__454_contigs__length_92224161	55173197	55173197
+PGA_scaffold3__454_contigs__length_92224161	89730041	89730041
+PGA_scaffold3__454_contigs__length_92224161	89730046	89730046
+PGA_scaffold3__454_contigs__length_92224161	89730066	89730066
+
+
+cp /cluster/scratch/rdekayne/David_work/genes_in_selected_regions/scaffoldannotation2.bed .
+bedtools intersect -a highest_snps.bed \
+    -b ./scaffoldannotation2.bed -wa -wb > outlier_highest_snps_notmerged_sex.bed
+    
+#maker-PGA_scaffold3__454_contigs__length_92224161-snap-gene-551.2
+grep -A1 "maker-PGA_scaffold3__454_contigs__length_92224161-snap-gene-551.2" /cluster/work/gdc/shared/p618/Rishi/GenomeProject/GenomeAnnotation_extrafiles/all.maker.proteins.fasta
+#>maker-PGA_scaffold3__454_contigs__length_92224161-snap-gene-551.2-mRNA-1 protein AED:0.05 eAED:1.00 QI:41|0|0|1|0|0|2|175|38
+MDWHPYTLLTFCTPTFRPAYCTPLTMASSSFLAPGSAP
+
+#and to calc variance explained
+paste snp_names.txt out_no_snp_names.txt > all_emmax_output.txt
+grep "1.171142961e-16" all_emmax_output.txt
+#PGA_scaffold3__454_contigs__length_92224161	55173092	.	0.7410381949	0.07238415936	1.171142961e-16
+
+#get peak snp and then extract this for all 90 individuals to get minor allele frequency:
+grep "55173092" highest_snps.bed > highest_sex_snp.txt
+vcftools --gzvcf sex_no_missing.vcf.gz --positions highest_sex_snp.txt --freq --out sex_peak_freq
+
+
+##########################
+##########################
+#	6. parallel study
+##########################
+##########################
+
+## 6.1 pca
+produce PCAs for these parallel individuals:
+#make one VCF for all
+
+#then filter vcfs
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.16 bedtools/2.28.0
+vcftools --keep /cluster/scratch/rdekayne/99_reanalysis/parallel/parallel.individuals --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz --recode --stdout | gzip -c > /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz
+
+#how many markers:
+bcftools view -H /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz | wc -l
+#14313952
+
+## 6.1 pca
+#use plink to filter markers and then produce PCAs
+module load gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out parallel_filt
+
+# prune and create pca
+plink --vcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract parallel_filt.prune.in \
+--make-bed --pca --out parallel_filt
+#627177 variants and 24 people pass filters and QC.
+
+## 6.2 fst
+#make indiv lists for each lake pair #Brienz (albellus vs alpinus), neuchatel (candidus vs palea), luzern (zugensis vs bodenbalchen) and Walen (heglingus vs duplex)
+
+#and then run:
+
+##fst_parallel_investigation.lsf
+#!/bin/bash
+#BSUB -J "Fst" 
+#BSUB -W 4:00 
+#BSUB -n 1
+#BSUB -R "rusage[mem=5000]"
+
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.16
+
+#now calc Fsts:
+
+for pop1 in $(find *.indivlist)
+do
+for pop2 in $(find *.indivlist)
+do
+
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz --weir-fst-pop $pop1 --weir-fst-pop $pop2 --fst-window-size 50000 --fst-window-step 50000 --mac 1 --out ${pop1}_${pop2}_fst
+
+done
+done
+
+#
+
+####now done for pooled HGR/LGR samples:
+cat HGR.indivlist 
+#032
+#033
+#034
+#041
+#043
+#044
+#0110
+#0111
+#0113
+#081
+#082
+#083
+
+cat LGR.indivlist 
+#0136
+#0137
+#093
+#074
+#072
+#071
+#0114
+#0118
+#0119
+#076
+#078
+#079
+
+#!/bin/bash
+#BSUB -J "Fst" 
+#BSUB -W 4:00 
+#BSUB -n 1
+#BSUB -R "rusage[mem=5000]"
+
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.16
+
+#now calc Fsts:
+
+for pop1 in $(find *.indivlist)
+do
+for pop2 in $(find *.indivlist)
+do
+
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz --weir-fst-pop $pop1 --weir-fst-pop $pop2 --fst-window-size 50000 --fst-window-step 50000 --mac 1 --out ${pop1}_${pop2}_fst
+
+done
+done
+
+bsub < fst_parallel_investigation.lsf 
+
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_Pooled/HGR.indivlist_LGR.indivlist_fst.windowed.weir.fst .
+
+
+#analysis of most differentiated windows in each lake - see R script first and then use .csv s for each lake to carry out the following steps to identify GO enrichment
+#first get gene info to compare against:
+
+#full gff
+perl quality_filter.pl -a 0.6 /cluster/work/gdc/shared/p618/AWG_v2/allr3.gff > allr3_filt.gff
+awk '{ if ($3 == "gene") { print } }' allr3_filt.gff | wc -l
+#44525
+
+#annotation on scaffolds taken from the AED 0.6 filtered data (see parallel_investigation script)
+
+#genes on scaffolds were extracted from the gff and then filtered to extract specific columns
+#cp /cluster/scratch/rdekayne/ConvertGFF/countgenes_postfilter_scaffolds.txt .
+#remove 2nd and 3rd column of annotation:
+#awk '{print $1,$4,$5,$9}' countgenes_postfilter_scaffolds.txt > scaffoldannotation.bed
+#sed 's/ /\t/g' scaffoldannotation.bed > scaffoldannotation2.bed
+
+#scaffoldannotation2.bed taken from gwas folder:
+cp /cluster/scratch/rdekayne/99_reanalysis/GWAS/gill_raker/scaffoldannotation2.bed .
+
+#now look for overlap of each .csv
+
+for lake in Lucerne Brienz Walen Neuchatel; do
+	echo $lake
+	cp "$lake"_outliers.csv "$lake"_outliers.csv.bed;
+	sed -E 's/("([^"]*)")?,/\2\t/g' "$lake"_outliers.csv.bed > "$lake"_outliers.csv_tab.bed;
+	sed -i 's/ /\t/g' "$lake"_outliers.csv_tab.bed;
+	tr -s '\t' '\t' < "$lake"_outliers.csv_tab.bed > "$lake"_outliers.csv_tab.tsv;
+	tail -n +2 "$lake"_outliers.csv_tab.tsv > "$lake"_outliers.csv_tab_onetab.bed;
+	cat "$lake"_outliers.csv_tab_onetab.bed | awk '{print $2,$3,$4}' > "$lake".bed;
+	sed -i 's/ /\t/g' "$lake".bed;
+	bedtools intersect -a "$lake".bed -b ./scaffoldannotation2.bed -wa -wb > "$lake"_extractedannotation.txt;
+	awk '{print $7}' "$lake"_extractedannotation.txt | awk -F";" '$1=$1' OFS="\t" | awk '{print $2}' | sed 's/Name=//g' > "$lake"_extractedannotation_gene_names.txt
+	wc -l "$lake"_extractedannotation_gene_names.txt
+	awk '{print $7}' "$lake"_extractedannotation.txt  | awk -F";" '$1=$1' OFS="\t" | awk '{print $2}' | sed 's/Name=//g' | sort | uniq > "$lake"_extractedannotation_unique_gene_names.txt
+	wc -l "$lake"_extractedannotation_unique_gene_names.txt
+done
+
+#and download /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_Fst/GO/*_extractedannotation_unique_gene_names.txt for R script to do gene ontology enrichment
+#also will need GO_filt.out also used below
+cat GO.out | awk '{print $1,$2,"GO:"$3, $4}' > GO_filt.out
+
+#also find list of go terms that correspond to each lake and combine them
+
+#and then merge gene lists for all lakes
+
+
+## 6.3 css
+#####
+#first prepare R
+#install SNPrelate in home directory using interactive node
+module load new gcc/4.8.2 r/3.6.0
+R
+
+##now in R console
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+ 
+BiocManager::install("SNPRelate")
+library(SNPRelate)
+
+install.packages("intervals")
+
+#now prepare input for CSS
+#use only parallel individuals vcf file: /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz
+
+#get old names:
+bcftools query -l /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz > oldname.txt
+
+#use newnames CSS_newname.txt
+#filter vcf to keep only parallel individuals
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz --keep ./CSS_individuals.txt --recode --out all_css_indivs
+
+#change names in file:
+bcftools reheader --samples ./CSS_newname.txt -o all_newname.vcf all_css_indivs.recode.vcf
+
+#check that full.popfile has right format
+#name	0/1
+
+#subset vcf that is renamed by chromosomes so we can run in parallel:
+##get_chrom_vcfs.lsf
+#!/bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+
+# define jobindex
+run_numb=${LSB_JOBINDEX}
+# find individual name corresponding with the job index number in a file I've called fastq.individuals 
+# (can also be filenames)
+chrom_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/chrom_vcfs/chromlist.txt | sed -n ${run_numb}p)
+output_dir=/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/chrom_vcfs
+
+# call subset vcf
+vcftools --vcf /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/all_newname.vcf  --chr ${chrom_name}  --recode --recode-INFO-all --out ${output_dir}/VCF_${chrom_name}
+
+##and run this
+bsub -n1 -W 4:00 -J "chromvcf[1-40]%10" -R "rusage[mem=5000]" < /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/chrom_vcfs/get_chrom_vcfs.lsf
+
+#then remove collapsed chromosomes
+rm VCF_PGA_scaffold21__417_contigs__length_56862223.recode.vcf
+rm VCF_PGA_scaffold27__289_contigs__length_46671285.recode.vcf
+rm VCF_PGA_scaffold31__196_contigs__length_44616205.recode.vcf
+rm VCF_PGA_scaffold34__308_contigs__length_42609905.recode.vcf
+rm VCF_PGA_scaffold37__332_contigs__length_36774138.recode.vcf
+
+#split up vcf for scaffold 0 since too big
+vcftools --vcf VCF_PGA_scaffold0__352_contigs__length_93459789.recode.vcf --chr PGA_scaffold0__352_contigs__length_93459789 --to-bp 50000000 --recode --out VCF_PGA_scaffold0__352_contigs__length_93459789_part1.vcf
+vcftools --vcf VCF_PGA_scaffold0__352_contigs__length_93459789.recode.vcf --chr PGA_scaffold0__352_contigs__length_93459789 --from-bp 50000001 --recode --out VCF_PGA_scaffold0__352_contigs__length_93459789_part2.vcf
+
+#then combine into one list of 36
+rm *.log
+ls VCF* > vcf.list
+
+mv chrom_vcfs/* .
+##for it to work the vcf files need to be in the same directory as the script
+
+#test on one vcf
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+module load new gcc/4.8.2 r/3.6.0
+
+###runCSS.lsf
+#!/bin/bash
+
+#load modules
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+module load new gcc/4.8.2 r/3.6.0
+
+#identify parameters:
+run_numb=${LSB_JOBINDEX}
+
+#get vcfs:
+vcf_name=$(cat ./vcf.list | sed -n ${run_numb}p)
+
+#run R script
+Rscript --vanilla CSSm.R ${vcf_name} full.popfile 50000 50000 10 basepair pca 0.05
+#
+
+#and run all
+bsub -n1 -W 4:00 -J "runCSS[1-37]%10" -R "rusage[mem=5000]" < /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/runCSS.lsf
+
+for filename in *.50000basepair50000step.window.pca.full.popfile.CSSm.txt; do
+	echo ${filename}
+	tail -n +2 ${filename} | awk 'BEGIN {max = 0} {if ($5>max) max=$5} END {print max}'
+done 
+
+#now combine in one file so we can plot with fst
+cat VCF_PGA_scaffold0__352_contigs__length_93459789_part1.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold0__352_contigs__length_93459789_part2.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold1__210_contigs__length_43329510.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold2__176_contigs__length_42764345.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold3__454_contigs__length_92224161.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold4__243_contigs__length_45591172.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold5__223_contigs__length_43692974.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold6__535_contigs__length_65391737.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold7__351_contigs__length_68138733.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold8__181_contigs__length_65193448.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold9__196_contigs__length_60468309.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold10__182_contigs__length_63177489.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold11__203_contigs__length_63881516.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold12__167_contigs__length_57740044.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold13__147_contigs__length_47256133.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold14__173_contigs__length_55641933.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold15__168_contigs__length_54025139.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold16__334_contigs__length_54216998.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold17__183_contigs__length_51949489.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold18__164_contigs__length_59907985.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold19__147_contigs__length_54335267.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold20__181_contigs__length_52945597.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold22__199_contigs__length_52020451.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold23__167_contigs__length_50329371.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold24__152_contigs__length_51033154.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold25__179_contigs__length_50922480.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold26__192_contigs__length_48683376.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold28__172_contigs__length_48977775.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold29__157_contigs__length_48675208.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold30__165_contigs__length_48446552.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold32__183_contigs__length_44662967.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold33__143_contigs__length_40727438.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold35__141_contigs__length_42009912.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold36__136_contigs__length_43663377.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold38__206_contigs__length_33962415.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt \
+VCF_PGA_scaffold39__3_contigs__length_1094305.recode.50000basepair50000step.window.pca.full.popfile.CSSm.txt > all_CSS_output50000basepair50000step.window.pca.full.txt
+
+#now remove header line for each case:
+tail -n +2 all_CSS_output50000basepair50000step.window.pca.full.txt | grep -v "css" > all_CSS_output50000basepair50000step.window.pca.full_noheaders.txt
+
+#and check max value
+cat all_CSS_output50000basepair50000step.window.pca.full_noheaders.txt | awk 'BEGIN {max = 0} {if ($5>max) max=$5} END {print max}'
+
+#now we want to run permutation script:CSSm_permutation.R 
+
+#first create dmat_files.txt
+ls *.dmat.gz > dmat_files.txt
+
+#and textfiles.txt
+ls *.CSSm.txt > textfiles.txt
+
+#runCSSpermutations.lsf
+#!/bin/bash
+
+#load modules
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+module load new gcc/4.8.2 r/3.6.0
+
+#identify parameters:
+run_numb=${LSB_JOBINDEX}
+
+#get vcfs:
+dmat_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/dmat_files.txt | sed -n ${run_numb}p)
+text_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/textfiles.txt | sed -n ${run_numb}p)
+
+#run R script
+Rscript --vanilla CSSm_permutation.R ${dmat_name} ${text_name} full.popfile 500000
+#
+
+
+bsub -n1 -W 4:00 -J "runCSS[1-36]%5" -R "rusage[mem=18000]" < /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/runCSSpermutations.lsf
+
+#now combine in one file so we can plot with fst
+cat VCF_PGA_scaffold0__352_contigs__length_93459789_part1.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold0__352_contigs__length_93459789_part2.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold1__210_contigs__length_43329510.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold2__176_contigs__length_42764345.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold3__454_contigs__length_92224161.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold4__243_contigs__length_45591172.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold5__223_contigs__length_43692974.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold6__535_contigs__length_65391737.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold7__351_contigs__length_68138733.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold8__181_contigs__length_65193448.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold9__196_contigs__length_60468309.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold10__182_contigs__length_63177489.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold11__203_contigs__length_63881516.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold12__167_contigs__length_57740044.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold13__147_contigs__length_47256133.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold14__173_contigs__length_55641933.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold15__168_contigs__length_54025139.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold16__334_contigs__length_54216998.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold17__183_contigs__length_51949489.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold18__164_contigs__length_59907985.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold19__147_contigs__length_54335267.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold20__181_contigs__length_52945597.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold22__199_contigs__length_52020451.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold23__167_contigs__length_50329371.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold24__152_contigs__length_51033154.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold25__179_contigs__length_50922480.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold26__192_contigs__length_48683376.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold28__172_contigs__length_48977775.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold29__157_contigs__length_48675208.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold30__165_contigs__length_48446552.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold32__183_contigs__length_44662967.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold33__143_contigs__length_40727438.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold35__141_contigs__length_42009912.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold36__136_contigs__length_43663377.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold38__206_contigs__length_33962415.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt \
+VCF_PGA_scaffold39__3_contigs__length_1094305.recode.50000basepair50000step.window.pca.full.popfile.CSSm.500000perm.txt > all_CSS_output_500kpermutations_50000basepair50000step.window.pca.full.txt
+
+tail -n +2 all_CSS_output_500kpermutations_50000basepair50000step.window.pca.full.txt | grep -v "css" > all_CSS_output_500kpermutations_50000basepair50000step.window.pca.full_noheaders.txt
+
+#download css and fst
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_Fst/brienz/C.albellus_Brienz.indivlist_C.alpinus_Brienz.indivlist_fst.windowed.weir.fst .
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_Fst/luzern/C.zugensis_Lucerne.indivlist_C.bodenbalchen_Lucerne.indivlist_fst.windowed.weir.fst .
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_Fst/neuchatel/C.candidus_Neuenburg.indivlist_C.palaea_Neuenburg.indivlist_fst.windowed.weir.fst .
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_Fst/walen/C.heglingus_Walen.indivlist_C.duplex_Walen.indivlist_fst.windowed.weir.fst .
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/all_CSS_output50000basepair50000step.window.pca.full_noheaders.txt .
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/all_CSS_output_500kpermutations_50000basepair50000step.window.pca.full_noheaders.txt .
+
+
+## 6.4 outlier analysis
+#similar analysis with 342 windows
+#output of neighbouring windows written to: CSS_1percent_outliers.csv
+
+#then we want to use the identified outlier windows to see what genes are present in them using the genome annotation:
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+cp /cluster/work/gdc/shared/p618/Rishi/Genome/ConvertGFF/countgenes_postfilter_scaffolds.txt .
+
+#scaffoldannotation2.bed is a filtered version of the annotations on scaffolds - 42695 lines - see David analysis for further information
+#GO.out is list of go terms from annotation - 390699 lines
+
+#use CSS_1percent_outliers.csv but need to convert to tabs
+sed -E 's/("([^"]*)")?,/\2\t/g' CSS_1percent_outliers.csv > CSS_1percent_outliers.tsv
+
+#and remove first header line
+tail -n +2 CSS_1percent_outliers.tsv > CSS_1percent_outliers.bed
+
+#find overlap with bedtools to find annotations which fit within windows
+bedtools intersect -a ./CSS_1percent_outliers.bed \
+    -b ./scaffoldannotation2.bed -wa -wb > extractedannotation342.txt
+        
+#make file with just the gene names
+#extract row 15 with gene name, split into two columns with ; then extract second bit and then remove the name= bit to leave gene name
+awk '{print $11}' extractedannotation342.txt | awk -F";" '$1=$1' OFS="\t" | awk '{print $2}' | sed 's/Name=//g' > gene_names342.txt
+
+#now loop through GO.out to extract info for each gene name
+wc -l gene_names343.txt
+#356
+
+for i in {1..356}
+do
+   genename=$(sed "${i}q;d" gene_names342.txt)
+   echo ${genename} 
+   grep "${genename}" GO.out >> shared_outlier342_GOannotations.txt
+done
+
+#3874 go annotations for the 356 genes that fall within adjacent css outlier windows
+#analysis of gene ontology of outliers
+cat GO.out | awk '{print $1,$2,"GO:"$3, $4}' > GO_filt.out
+
+##now we need GO_filt.out and gene_names342.txt for GO enrichment script - R 6.4
+
+#now look at PCA with all indivs
+awk '{print $1,$2,$3}' ./CSS_1percent_outliers.bed > 342_windows.bed
+
+#this time use --remove to remove outgroups
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz --bed ./342_windows.bed --recode --stdout | gzip -c > All_342_allsnps.vcf.gz
+
+#how many markers:
+bcftools view -H All_342_allsnps.vcf.gz | wc -l
+#144406
+
+#use plink to filter markers and then produce PCAs
+module load gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf All_342_allsnps.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out All_342_allsnps_filt
+
+# prune and create pca
+plink --vcf All_342_allsnps.vcf.gz --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract All_342_allsnps_filt.prune.in \
+--make-bed --pca --out All_342_allsnps_filt
+#11526 variants and 91 people pass filters and QC.
+
+##and download All_342_allsnps_filt.eigenval and All_342_allsnps_filt.eigenvec for R script to plot pcas
+
+#####and now do the same but keep outgroups:
+#/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS_outliers_woutgroups
+#use --remove remove.indivs.txt to remove outgroups with no known ecomorph i.e.
+#909
+#910
+#903
+#904
+cp ../Parallel_CSS_outliers/342_windows.bed .
+
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz --bed ./342_windows.bed --remove remove.indivs.txt --recode --stdout | gzip -c > All_342_allsnps_woutgroups.vcf.gz
+
+#how many markers:
+bcftools view -H All_342_allsnps_woutgroups.vcf.gz | wc -l
+#144406
+
+#use plink to filter markers and then produce PCAs
+module load gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf All_342_allsnps_woutgroups.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out All_342_allsnps_wout_filt
+
+# prune and create pca
+plink --vcf All_342_allsnps_woutgroups.vcf.gz --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract All_342_allsnps_wout_filt.prune.in \
+--make-bed --pca --out All_342_allsnps_wout_filt
+#12007 variants and 95 people pass filters and QC.
+
+##and download All_342_allsnps_wout_filt.eigenval and All_342_allsnps_wout_filt.eigenvec for R script to plot pcas
+
+#####and now do the same as original but remove markers on emmax associated peak:
+#/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS_outliers_noGRCpeak
+
+cp ../Parallel_CSS_outliers/342_windows.bed .
+
+#this time remove PGA_scaffold22__199_contigs__length_52020451
+
+cat remove_scaff22.bed 
+#chrom	chromStart	chromEnd
+#PGA_scaffold22__199_contigs__length_52020451	1	52020451
+
+cp ../Parallel_CSS_outliers/All_342_allsnps.vcf.gz .
+
+vcftools --gzvcf All_342_allsnps.vcf.gz --exclude-bed remove_scaff22.bed --recode --stdout | gzip -c > All_342_allsnps_noGRCpeak.vcf.gz
+
+#how many markers:
+bcftools view -H All_342_allsnps_noGRCpeak.vcf.gz | wc -l
+#137735
+
+#use plink to filter markers and then produce PCAs
+module load gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf All_342_allsnps_noGRCpeak.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out All_342_allsnps_noGRCpeak_filt
+
+# prune and create pca
+plink --vcf All_342_allsnps_noGRCpeak.vcf.gz --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract All_342_allsnps_noGRCpeak_filt.prune.in \
+--make-bed --pca --out All_342_allsnps_noGRCpeak_filt
+#11080 variants and 91 people pass filters and QC.
+
+##and download All_342_allsnps_noGRCpeak_filt.eigenval and All_342_allsnps_noGRCpeak_filt.eigenvec for R script to plot pcas
+
+
+##########################
+##########################
+#	7. f4 stats
+##########################
+##########################
+#/cluster/scratch/rdekayne/99_reanalysis/f4
+
+#make treemix.input file which has sample \t population:
+032     HGR1
+033     HGR1
+034     HGR1
+041     HGR2
+043     HGR2
+044     HGR2
+0110    HGR3
+0111    HGR3
+0113    HGR3
+081     HGR4
+082     HGR4
+083     HGR4
+0136    LGR1
+0137    LGR1
+093     LGR1
+074     LGR2
+072     LGR2
+071     LGR2
+0114    LGR3
+0118    LGR3
+0119    LGR3
+076     LGR4
+078     LGR4
+079     LGR4
+
+#use previous vcf made in parallel for these individuals
+#/cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz
+
+#now LD prune vcf file with joannas script
+wget https://github.com/joanam/scripts/raw/master/ldPruning.sh
+chmod +x ldPruning.sh
+./ldPruning.sh /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.vcf.gz
+
+#how many loci left
+bcftools view -H /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.LDpruned.vcf.gz  | wc -l
+#1315105
+
+#download plink2treemix.py: https://speciationgenomics.github.io/Treemix/ and put in working directory
+chmod +x plink2treemix.py
+
+awk '{print $1,$1,$2}' treemix.input  > treemix.input.clust
+
+#need names to match .map file etc. from plink
+
+#get 
+wget https://raw.githubusercontent.com/speciationgenomics/scripts/master/vcf2treemix.sh
+chmod +x vcf2treemix.sh
+
+#need to modify because of chromosome names so need to append to add --chrom-map file
+cat -n chrom.list | cut -f1 > numbs.list
+paste chrom.list numbs.list > chrom.map
+
+sed -i 's/--plink/--plink --chrom-map chrom.map/g' vcf2treemix.sh
+sed -i 's/--allow-extra-chr 0/--allow-extra-chr/g' vcf2treemix.sh
+sed -i 's/plink2treemix.py/.\/plink2treemix.py/g' vcf2treemix.sh
+
+./vcf2treemix.sh /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.LDpruned.vcf.gz treemix.input.clust
+
+mv /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.LDpruned.* .
+mv /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.p* .
+mv /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.log .
+mv /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.map .
+mv /cluster/scratch/rdekayne/99_reanalysis/vcfs/parallel_individuals.nosex .
+
+#################
+mkdir f4_run
+cd f4_run
+
+#now run f4 from https://raw.githubusercontent.com/mmatschiner/F4/master/f4.py
+
+chmod +x f4.py
+
+t
+cp ../parallel_individuals.LDpruned.treemix.frq.gz .
+gunzip parallel_individuals.LDpruned.treemix.frq.gz 
+
+#now want to subset 4 taxon/group trees:
+#columns are ordered: LGR4 LGR1 LGR3 LGR2 HGR1 HGR3 HGR2 HGR4 
+##Pop1 vs Pop2
+awk '{print $2,$5,$4,$7}' parallel_individuals.LDpruned.treemix.frq  > P1P2_lake.frq
+awk '{print $2,$4,$5,$7}' parallel_individuals.LDpruned.treemix.frq  > P1P2_eco.frq
+
+##Pop1 vs Pop3
+awk '{print $2,$5,$3,$6}' parallel_individuals.LDpruned.treemix.frq  > P1P3_lake.frq
+awk '{print $2,$3,$5,$6}' parallel_individuals.LDpruned.treemix.frq  > P1P3_eco.frq
+
+##Pop1 vs Pop4
+awk '{print $2,$5,$1,$8}' parallel_individuals.LDpruned.treemix.frq  > P1P4_lake.frq
+awk '{print $2,$1,$5,$8}' parallel_individuals.LDpruned.treemix.frq  > P1P4_eco.frq
+
+##Pop2 vs Pop3
+awk '{print $4,$7,$3,$6}' parallel_individuals.LDpruned.treemix.frq  > P2P3_lake.frq
+awk '{print $4,$3,$7,$6}' parallel_individuals.LDpruned.treemix.frq  > P2P3_eco.frq
+
+##Pop2 vs Pop4
+awk '{print $4,$7,$1,$8}' parallel_individuals.LDpruned.treemix.frq  > P2P4_lake.frq
+awk '{print $4,$1,$7,$8}' parallel_individuals.LDpruned.treemix.frq  > P2P4_eco.frq
+
+##Pop3 vs Pop4
+awk '{print $3,$6,$1,$8}' parallel_individuals.LDpruned.treemix.frq  > P3P4_lake.frq
+awk '{print $3,$1,$6,$8}' parallel_individuals.LDpruned.treemix.frq  > P3P4_eco.frq
+
+ls P*.frq > subset.lists
+
+
+#and write script to go line by line running each: 
+#!/bin/bash
+
+#Example bsub command:
+#bsub -n1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "vcf_call[1-12]" -R "rusage[mem=6000,scratch=10000] span[hosts=1]" -o /cluster/scratch/rdekayne/treemix/f4_run < /cluster/scratch/rdekayne/treemix/f4_run/run_all_f4s.lsf
+
+##====================================================================================================
+## load modules 
+module load gcc/4.8.2 gdc java/1.8.0_73 python/3.3.3
+
+##====================================================================================================
+
+#information for each .frq file stored in subset.lists directory
+file_number=${LSB_JOBINDEX}
+frq_input=$(cat /cluster/scratch/rdekayne/99_reanalysis/f4/f4_run/subset.lists | sed -n ${file_number}p)
+
+##====================================================================================================
+
+###run f4
+python3 ./f4.py $frq_input
+
+#now run:
+bsub -n1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "f4_[1-12]" -R "rusage[mem=6000,scratch=10000] span[hosts=1]" -o /cluster/scratch/rdekayne/99_reanalysis/f4/f4_run/ < /cluster/scratch/rdekayne/99_reanalysis/f4/f4_run/run_all_f4s.lsf
+
+
+#and parse output:
+rm topologies.txt
+rm f4_values.txt
+rm interpretation.txt
+
+for i in *.out
+do
+	echo $i
+	grep "Assumed population topology:" $i >> topologies.txt
+	grep "Observed f4:" $i >> f4_values.txt
+	grep "The observed f4 value differs from zero" $i >> interpretation.txt
+done
+
+paste topologies.txt f4_values.txt > f4_combined_output.txt
+sed -i 's/Assumed population topology: //g' f4_combined_output.txt
+sed -i 's/Observed f4: //g' f4_combined_output.txt
+sed -i 's/\t/;/g' f4_combined_output.txt
+sed -i 's/ //g' f4_combined_output.txt
+sed -i '1s/^/topology;f4\n/' f4_combined_output.txt
+
+#then download and reorder for R script
+
+#in a tree with topology (A,(B,(C,D)))
+#without any additional admixture, the allele frequency difference between A and B should be completely independent from the allele frequency difference between C and D.
+# In that case, F4(A, B; C, D) should be zero, or at least not statistically different from zero. 
+#However, if there was gene flow from C or D into A or B, the statistic should be different from zero.
+
+##now to do jackknifing
+cp ../subset.lists .
+
+#and script to run:
+#!/bin/bash
+
+#Example bsub command:
+#bsub -n1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "vcf_call[1-12]" -R "rusage[mem=6000,scratch=10000] span[hosts=1]" -o /cluster/scratch/rdekayne/treemix/f4_run < /cluster/scratch/rdekayne/treemix/f4_run/f4_jackknifing_run/run_all_f4s_jackknife.lsf
+
+##====================================================================================================
+## load modules 
+module load gcc/4.8.2 gdc java/1.8.0_73 python/3.3.3
+
+##====================================================================================================
+
+#information for each .frq file stored in subset.lists directory
+file_number=${LSB_JOBINDEX}
+frq_input=$(cat /cluster/scratch/rdekayne/99_reanalysis/f4/f4_run/f4_jackknifing_run/subset.lists | sed -n ${file_number}p)
+
+python3 ./f4.py -k 1000 -s 1000 -x /cluster/work/gdc/shared/p703/bin/fsc26 $frq_input
+
+#now run:
+bsub -n1 -W 120:00 -J "f4_JK[1-1]" -R "rusage[mem=3000,scratch=10000] span[hosts=1]" -o /cluster/scratch/rdekayne/99_reanalysis/f4/f4_run/f4_jackknifing_run/test.out < /cluster/scratch/rdekayne/99_reanalysis/f4/f4_run/f4_jackknifing_run/run_all_f4s_jackknife.lsf
+bsub -n1 -W 24:00 -J "f4_JK[2-2]" -R "rusage[mem=4000,scratch=10000] span[hosts=1]" -o /cluster/scratch/rdekayne/99_reanalysis/f4/f4_run/f4_jackknifing_run/test.out < /cluster/scratch/rdekayne/99_reanalysis/f4/f4_run/f4_jackknifing_run/run_all_f4s_jackknife.lsf
+
+##########################
+##########################
+#	8. fixed differences 
+##########################
+##########################
+#		- 8.1 profundus
+#/cluster/scratch/rdekayne/99_reanalysis/fixeddifferences/profundus
+
+#look for allele frequences in profundus 026,027,029 compared to all other Alpine whitefish
+
+#profundus.list
+#026
+#027
+#029
+
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz --keep ./profundus.list --freq --out profundus_freq
+
+bcftools query -l /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz > all_noprof.list
+
+sed -i 's/^026//g' all_noprof.list
+sed -i 's/^027//g' all_noprof.list
+sed -i 's/^029//g' all_noprof.list
+sed -i '/^$/d' all_noprof.list
+
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz --keep ./all_noprof.list --freq --out all_noprof_freq
+
+paste profundus_freq.frq all_noprof_freq.frq > all_vs_prof.txt
+
+#now remove A:, C:, T:, G:
+sed -i 's/A://g' all_vs_prof.txt
+sed -i 's/T://g' all_vs_prof.txt
+sed -i 's/C://g' all_vs_prof.txt
+sed -i 's/G://g' all_vs_prof.txt
+
+#now extract all allele differences info
+awk 'BEGIN { FS=OFS="\t" } {print $1,$2,$6,$12,$6-$12}' all_vs_prof.txt > allele_dif_all_profundus_all.txt
+
+#and just the difference for plotting
+awk 'BEGIN { FS=OFS="\t" } {print $1,$2,$6-$12}' all_vs_prof.txt > allele_dif_profundus_all.txt
+
+#and file for fixed differences
+awk '{if ($3=="1") print $0}' allele_dif_profundus_all.txt > fixed_profundus1.txt
+awk '{if ($3=="-1") print $0}' allele_dif_profundus_all.txt > fixed_profundus-1.txt
+
+wc -l fixed_profundus1.txt
+#115 fixed_profundus1.txt
+
+
+#		- 8.2 nobilis
+
+#now same but in nobilis: 103,104,106
+
+#nobilis.list
+#0103
+#0104
+#0106
+
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz --keep ./nobilis.list --freq --out nobilis_freq
+
+bcftools query -l /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz > all_nonobilis.list
+
+sed -i 's/^0103//g' all_nonobilis.list
+sed -i 's/^0104//g' all_nonobilis.list
+sed -i 's/^0106//g' all_nonobilis.list
+sed -i '/^$/d' all_nonobilis.list
+
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz --keep ./all_nonobilis.list --freq --out all_nonobilis_freq
+
+paste nobilis_freq.frq all_nonobilis_freq.frq > all_vs_nobilis.txt
+
+#now remove A:, C:, T:, G:
+
+#and look at columns 5/6 and 11/12 to look for alt fixed markers
+sed -i 's/A://g' all_vs_nobilis.txt
+sed -i 's/T://g' all_vs_nobilis.txt
+sed -i 's/C://g' all_vs_nobilis.txt
+sed -i 's/G://g' all_vs_nobilis.txt
+
+#now extract all allele differences info
+awk 'BEGIN { FS=OFS="\t" } {print $1,$2,$6,$12,$6-$12}' all_vs_nobilis.txt > allele_dif_all_nobilis_all.txt
+
+#and just the difference for plotting
+awk 'BEGIN { FS=OFS="\t" } {print $1,$2,$6-$12}' all_vs_nobilis.txt > allele_dif_nobilis_all.txt
+
+#and file for fixed differences
+awk '{if ($3=="1") print $0}' allele_dif_nobilis_all.txt > fixed_nobilis1.txt
+awk '{if ($3=="-1") print $0}' allele_dif_nobilis_all.txt > fixed_nobilis-1.txt
+
+
+#then use these for plotting
+
+##########################
+##########################
+#	9. KEGG differences for fst outlier overlaps
+##########################
+##########################
+#see R script
+
+#for kegg: K07526
+grep -A1 "augustus_masked-PGA_scaffold11__203_contigs__length_63881516-processed-gene-394.0" /cluster/work/gdc/shared/p618/Rishi/GenomeProject/GenomeAnnotation_extrafiles/all.maker.proteins.fasta
+>augustus_masked-PGA_scaffold11__203_contigs__length_63881516-processed-gene-394.0-mRNA-1 protein AED:0.19 eAED:0.19 QI:125|0.92|0.86|1|0.5|0.46|15|0|819
+MDVRGDKHRVMDMHSQIFCPPARFDYQPHMGDEVCQVSAQQPVQIELLMRHHQLQSRLAT
+#Select seq ref|XP_035653310.1|	SLIT-ROBO Rho GTPase-activating protein 3-like isoform X7 [Oncorhynchus keta]	Oncorhynchus keta	132	132	100%	8e-35	98.33%	480	XP_035653310.1
+
+grep -A1 "maker-PGA_scaffold9__196_contigs__length_60468309-snap-gene-345.2" /cluster/work/gdc/shared/p618/Rishi/GenomeProject/GenomeAnnotation_extrafiles/all.maker.proteins.fasta 
+>maker-PGA_scaffold9__196_contigs__length_60468309-snap-gene-345.2-mRNA-1 protein AED:0.17 eAED:0.17 QI:41|0|0|0.86|0.76|0.81|22|0|1114
+METQVSLLGTHQRQIRNQLVEQFKCLEQQSESRIQLLQDLQDFFRRKAEIQLEYSRSLEK
+#Select seq ref|XP_029539089.1|	SLIT-ROBO Rho GTPase-activating protein 3 isoform X1 [Oncorhynchus nerka]	Oncorhynchus nerka	95.1	95.1	85%	6e-21	92.16%	1099	XP_029539089.1
+#Select seq ref|XP_036806249.1|	SLIT-ROBO Rho GTPase-activating protein 3 isoform X3 [Oncorhynchus mykiss]	Oncorhynchus mykiss	95.1	95.1	85%	6e-21	92.16%	1105	XP_036806249.1
+
+#lucerne specific
+grep -A1 "maker-PGA_scaffold18__164_contigs__length_59907985-snap-gene-193.27" /cluster/work/gdc/shared/p618/Rishi/GenomeProject/GenomeAnnotation_extrafiles/all.maker.proteins.fasta 
+>maker-PGA_scaffold18__164_contigs__length_59907985-snap-gene-193.27-mRNA-1 protein AED:0.23 eAED:0.23 QI:0|0.11|0.10|0.89|0.77|0.73|19|0|823
+MDIRFMTAHSPLVTRSRIYGMNAVGESNNGPHSGVARAPSQGVTVRRESKDHATLSDIYL
+#only annotated in C. sp. "Balchen" assembly
+
+#for kegg: K12959
+grep -A1 "maker-PGA_scaffold11__203_contigs__length_63881516-snap-gene-396.10" /cluster/work/gdc/shared/p618/Rishi/GenomeProject/GenomeAnnotation_extrafiles/all.maker.proteins.fasta
+>maker-PGA_scaffold11__203_contigs__length_63881516-snap-gene-396.10-mRNA-1 protein AED:0.21 eAED:0.21 QI:158|0.25|0.2|1|0.5|0.6|5|93|314
+MMRKTDPIETEIDLGDSDDEDLDADLYKDCEEPQLLWKAELGDRMDEEEAVSPLVDVSDT
+#Select seq ref|XP_041748265.1|	caveolin-2-like isoform X4 [Coregonus clupeaformis]	Coregonus clupeaformis	119	119	100%	2e-32	100.00%	145	XP_041748265.1
+#Select seq ref|XP_041748263.1|	caveolin-2-like isoform X2 [Coregonus clupeaformis]	Coregonus clupeaformis	119	119	100%	2e-32	100.00%	169	XP_041748263.1
+
+grep -A1 "maker-PGA_scaffold9__196_contigs__length_60468309-snap-gene-342.13" /cluster/work/gdc/shared/p618/Rishi/GenomeProject/GenomeAnnotation_extrafiles/all.maker.proteins.fasta
+>maker-PGA_scaffold9__196_contigs__length_60468309-snap-gene-342.13-mRNA-1 protein AED:0.11 eAED:0.11 QI:0|0.5|0.33|0.66|1|1|3|652|185
+MPPCKPYPADPTAHPPRPTTLPASAPTQAHGPTMADQYQYNTNEEKIVKDSHTKEIDLIN
+#Select seq ref|XP_041744109.1|	caveolin-3-like [Coregonus clupeaformis]	Coregonus clupeaformis	62.0	62.0	45%	4e-10	100.00%	152	XP_041744109.1
+#Select seq ref|XP_021424879.1|	caveolin-3 [Oncorhynchus mykiss]	Oncorhynchus mykiss	62.0	62.0	45%	4e-10	100.00%	152	XP_021424879.1
+
+#https://www.ebi.ac.uk/Tools/msa/tcoffee/
+
+##############
+#misc checks:
+
+#informative/polymorphic loci in Alpine whitefish
+#filter vcf to have max and min 2 alleles:
+VCF_IN=99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz
+VCF_OUT=99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups_ALPINEPOLYMORPHIC.vcf.gz
+# set filters
+vcftools --gzvcf $VCF_IN \
+--min-alleles 2 --max-alleles 2 \
+--mac 1 \
+--recode --stdout | gzip -c > \
+$VCF_OUT
+
+#kept 9120498 out of a possible 14313952 Sites
+
+#without mac 1
+#kept 14313952 out of a possible 14313952
+
+#mosdepth for coverage: https://github.com/brentp/mosdepth 
+#/cluster/project/gdc/shared/tools/mosdepth-0.2.8/mosdepth -n
+#bams are found here: /cluster/work/gdc/shared/p659/bams_filtered/
+#e.g. 002_FR_sorted_dup_WFRef.bam
+
+#!/bin/bash
+
+##====================================================================================================
+## load modules 
+module load gcc/4.8.2 gdc java/1.8.0_73 python/3.3.3
+
+##====================================================================================================
+
+#information for each .frq file stored in subset.lists directory
+bam_number=${LSB_JOBINDEX}
+bam_file=$(cat /cluster/work/gdc/shared/p659/bams_filtered/99_bams.txt | sed -n ${bam_number}p)
+
+##====================================================================================================
+
+###run mosdepth
+/cluster/project/gdc/shared/tools/mosdepth-0.2.8/mosdepth -n ${bam_file} /cluster/work/gdc/shared/p659/bams_filtered/${bam_file}
+
+
+#now run:
+bsub -n1 -W 1:00 -J "mosdepth_[1-10]" -R "rusage[mem=5000,scratch=5000] span[hosts=1]" -o /cluster/scratch/rdekayne/99_reanalysis/mosdepth/out.txt < /cluster/scratch/rdekayne/99_reanalysis/mosdepth/run_mosdepth.lsf 
+bsub -n1 -W 1:00 -J "mosdepth_[11-99]%20" -R "rusage[mem=5000,scratch=5000] span[hosts=1]" -o /cluster/scratch/rdekayne/99_reanalysis/mosdepth/out.txt < /cluster/scratch/rdekayne/99_reanalysis/mosdepth/run_mosdepth.lsf 
+
+rm *.global.dist.txt
+
+for file in *.summary.txt
+do
+echo $file >> mosdepth_name_summary.txt
+grep "total" $file >> mosdepth_summary.txt
+done
+
+paste mosdepth_name_summary.txt mosdepth_summary.txt > full_mosdepth_output.txt
+
+#get min and max
+min = 9.32 (david's)
+max = 41.69
+mean = 26.76

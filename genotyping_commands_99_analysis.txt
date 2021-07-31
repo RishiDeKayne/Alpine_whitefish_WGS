@@ -1,0 +1,292 @@
+###This script contains commands for whitefish De-Kayne et al. 
+
+#this script explains how the key vcf file 99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz is produced
+
+#then the following analyses
+#	1. fastqc
+#	2. mapping with bwa
+#	3. gatk genotype calling
+#	4. 96/97 individual file filtering 
+#	5. add additional two macrophthalmus 
+
+##########################
+##########################
+#	1. fastqc
+##########################
+##########################
+
+#first we start with producing a vcf with the 96 individuals sequenced on 
+#get full list of names from lims submistion form
+awk '{print $2}' Lims_resequencing_Rishi_tab_delimited.txt > allindividualnames.txt
+#then move this to the folder with all fastq.gz files
+
+#and run this script submit.combine_files.lsf 
+#!/bin/bash
+module load gcc/4.8.2 gdc fastqc/0.11.4 java/1.8.0_31
+
+# define jobindex
+ind=${LSB_JOBINDEX}
+indiv_name=$(cat allindividualnames.txt | sed -n ${ind}p)
+
+cat "${indiv_name}"*_R1_*.fastq.gz > newnamed/"${indiv_name}"_R1.fastq.gz
+cat "${indiv_name}"*_R2_*.fastq.gz > newnamed/"${indiv_name}"_R2.fastq.gz
+
+
+rm "${indiv_name}"*.fastq.gz
+bsub -n1 -W 0:30 -J "cbn[1-96]%20" -R "rusage[mem=1024]" < submit.combine_files.lsf 
+
+#now re-run fastqc
+#!/bin/bash
+module load gcc/4.8.2 gdc fastqc/0.11.4 java/1.8.0_31
+
+# define jobindex
+ind=${LSB_JOBINDEX}
+# find individual name corresponding with the job index number in a file I've called fastq.individuals 
+# (can also be filenames)
+indiv_name=$(cat /cluster/work/gdc/init/p659/data/newnamed/fastq.individuals | sed -n ${ind}p)
+
+# call fastqc
+fastqc -t 1 -o /cluster/scratch/rdekayne/Chapter3_RAW/full_merged_fastqc/ --noextract -d /cluster/work/gdc/init/p659/data/newnamed ${indiv_name}
+
+#get individuals names
+ls *.fastq.gz > fastq.individuals
+
+#and run
+bsub -n1 -W 2:00 -J "chp3_fqc[1-96]%10" -R "rusage[mem=4000]" < submit.chp3_fqc.lsf
+bsub -n1 -W 2:00 -J "chp3_fqc[97-192]%10" -R "rusage[mem=4000]" < submit.chp3_fqc.lsf
+
+
+#then use multiqc
+bsub -W 4:00 -Is /bin/bash
+module load gcc/4.8.2 gdc python/2.7.11
+multiqc /cluster/scratch/rdekayne/Chapter3_RAW/full_merged_fastqc/
+
+
+##########################
+##########################
+#	2. mapping with bwa
+##########################
+##########################
+#now to do mapping of individuals:
+#use david scripts
+
+#test with interactive node
+bsub -W 4:00 -Is /bin/bash
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[032,033]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi.lsf
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[032,033,034,093,038,039,040,051,053,055,012,013,014,061,063,064,016,017,019,021,022,023,026,027,029,056,058,059]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi.lsf
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[058]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi.lsf
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[136,137,134]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi_100s.lsf
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[999]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi_100s.lsf
+
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[047,048,050,066,068,070,041,043,044,074,072,071,010,076,078,079,081,082]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi.lsf
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[099,096,097]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi.lsf
+
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[083,086,087,090,094,095,098]%4" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi.lsf
+
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[114,118,119,103,104,106,107,108,109,110,111,113,100,101,102,903,904,906,911,907,908,909,910]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi_100s.lsf
+
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[002,003,005,006,007]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi_double0.lsf
+
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[034]%4" -R "select[nthreads==2]" -R "rusage[mem=15000,scratch=20000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi.lsf
+
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[121,122,123,126,127,128,129,131,132]%5" -R "select[nthreads==2]" -R "rusage[mem=7500,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi_100s.lsf
+bsub -n 10 -W 48:00 -N -u "rishi.de-kayne@eawag.ch" -J "BWA_Nova1[122,126,127]%5" -R "select[nthreads==2]" -R "rusage[mem=15000,scratch=20000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/BWA_PROTOCOL.txt < /cluster/home/rdekayne/scripts/BWA_Final_Nova_rishi_100s.lsf
+
+#then sorting/processing
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[012,014,017,021,023,027,032,034,039,051,013,016,019,022,026,029,033,038,040]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_000s.lsf
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[053,055,061,063,064,056,058,059]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_000s.lsf
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[034]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_000s.lsf
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[093]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_000s.lsf
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[136,137,134]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_100s.lsf
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[999]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_100s.lsf
+
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[047,048,050,066,068,070,041,043,044,074,072,071,010,076,078,079,081,082,099,096,097,083,086,087,090,094,095,098]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_000s.lsf
+
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[114,118,119,103,104,106,107,108,109,110,111,113,100,101,102,903,904,906,911,907,908,909,910]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_100s.lsf
+
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[002,003,005,006,007]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_000s_double.lsf
+
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[034]%5" -R "rusage[mem=50000,scratch=20000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_000s.lsf
+
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[123,128,129,131,132]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_100s.lsf
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[121]%5" -R "rusage[mem=30000,scratch=10000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_100s.lsf
+
+bsub -n 1 -W 24:00 -N -u "rishi.de-kayne@eawag.ch" -J "Processing[122,126,127]%5" -R "rusage[mem=50000,scratch=20000] span[hosts=1]" -o /cluster/home/rdekayne/BWA_test/Processing_bam.txt < /cluster/home/rdekayne/scripts/Processing_bam_100s.lsf
+
+#126 127 122 causing issues so run with more memory to finish
+
+##########################
+##########################
+#	3. gatk genotype calling
+##########################
+##########################
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+#split genome into windows using bedtools (-i winnum gives the windows in each chromosome numbers)
+bedtools makewindows -g Genome_Chrom_lengths.txt -w 5000000 -i winnum > GATK_windows.txt
+#now add row numbers to file to track jobs when running in array
+awk -F'\t' -v OFS='\t' 'NR>1 { $(NF+1)=NR-1} 1' GATK_windows.txt > GATK_windows_input.txt
+#make variables for GATK, chrom name, start and end (each as own file since we need to modify start)
+awk '{ print $1}' GATK_windows_input.txt > Chrom_Names.txt
+#bedtools starts at 0 and GATK needs 1 so modify 0 to 1 for first window of each chromosome)
+awk '{ print $2}' GATK_windows_input.txt > Chrom_Start_0.txt
+sed "s/\<0\>/1/g" Chrom_Start_0.txt > Chrom_Start.txt
+awk '{ print $3}' GATK_windows_input.txt > Chrom_End.txt
+
+#and start array job of data in 5Mb windows
+
+bsub -n1 -W 120:00 -N -u "rishi.de-kayne@eawag.ch" -J "vcf_call[1-433]%60" -R "rusage[mem=5000,scratch=6000] span[hosts=1]" -o /cluster/scratch/rdekayne/BAM_RESEQ/VCFs_5Mb/vcf_output.5Mb_lowmem.txt < /cluster/scratch/rdekayne/BAM_RESEQ/VCFs_5Mb/haplo_caller_splitchrom.5Mb_lowmem.lsf
+
+##some jobs failed so now rerun in 2.5Mb windows:
+#need new chrom start/end files:
+#/cluster/scratch/rdekayne/BAM_RESEQ/VCFs_5Mb/Chrom_Names_rerun.txt
+#/cluster/scratch/rdekayne/BAM_RESEQ/VCFs_5Mb/Chrom_Start_rerun.txt
+#/cluster/scratch/rdekayne/BAM_RESEQ/VCFs_5Mb/Chrom_End_rerun.txt
+
+#and new lsf
+cp /cluster/scratch/rdekayne/BAM_RESEQ/VCFs_5Mb/haplo_caller_splitchrom.5Mb_lowmem.lsf /cluster/scratch/rdekayne/BAM_RESEQ/VCFs_5Mb/haplo_caller_splitchrom.2.5Mb_lowmem.lsf
+
+#and start new windows (was 31 which timed out - now 62 new 2.5 windows)
+bsub -n1 -W 120:00 -N -u "rishi.de-kayne@eawag.ch" -J "vcf_call[1-62]%62" -R "rusage[mem=5000,scratch=6000] span[hosts=1]" -o /cluster/scratch/rdekayne/BAM_RESEQ/VCFs_2.5Mb/vcf_output.5Mb_lowmem.txt < /cluster/scratch/rdekayne/BAM_RESEQ/VCFs_5Mb/haplo_caller_splitchrom.2.5Mb_lowmem.lsf
+
+###################################
+#now with full dataset:
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+bcftools concat -Ou -f chromosomes_to_merge_ordered.txt | bcftools sort -Oz -o 96indiv_allchroms_output.vcf.gz
+bsub -n 1 -W 48:00 -R "rusage[mem=20000]" "module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14; bcftools concat -Ou -f chromosomes_to_merge_ordered.txt | bcftools sort -Oz -o 96indiv_allchroms_output.vcf.gz"
+
+bcftools view -H 96indiv_allchroms_output.vcf.gz | wc -l
+#60868346
+
+##########################
+##########################
+#	4. 96/97 individual file filtering 
+##########################
+##########################
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0 
+
+VCF_IN=/cluster/work/gdc/shared/p618/Rishi/Resequencing_genotyping/BAM_RESEQ/VCFs_5Mb/96indiv_allchroms_output.vcf.gz
+VCF_OUT=/cluster/scratch/rdekayne/WGS/97indiv_allchroms_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz
+# set filters
+MAC=3
+MISS=1
+QUAL=30
+MIN_DEPTH=3
+MAX_DEPTH=50
+vcftools --gzvcf $VCF_IN \
+--remove-indels --min-alleles 2 --max-alleles 2 --mac $MAC --max-missing $MISS --minQ $QUAL \
+--min-meanDP $MIN_DEPTH --max-meanDP $MAX_DEPTH \
+--minDP $MIN_DEPTH --maxDP $MAX_DEPTH --recode --stdout | gzip -c > \
+$VCF_OUT
+
+bcftools view -H $VCF_OUT | wc -l
+#16926710
+
+#this filtering with mac 3 means an allele must be present 3 times in 97 individuals 
+#a maf of 0.05 was deemed too stringent as this equates to 9.7 occurrences in our dataset 
+#with only 3 individuals per species >9 occurrences means that species specific alleles would be filtered out
+
+#now remove SNPs in collapsed regions
+#collapsed.bed:
+#PGA_scaffold3__454_contigs__length_92224161     1       31500000
+#PGA_scaffold6__535_contigs__length_65391737     39000000        65391737
+#PGA_scaffold16__334_contigs__length_54216998    41500000        54216998
+#PGA_scaffold36__136_contigs__length_43663377    32500000        43663377
+#PGA_scaffold21__417_contigs__length_56862223    1       56862223
+#PGA_scaffold27__289_contigs__length_46671285    1       46671285
+#PGA_scaffold31__196_contigs__length_44616205    1       44616205
+#PGA_scaffold34__308_contigs__length_42609905    1       42609905
+#PGA_scaffold37__332_contigs__length_36774138    1       36774138
+
+VCF_IN=/cluster/scratch/rdekayne/WGS/97indiv_allchroms_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz
+VCF_OUT=/cluster/scratch/rdekayne/WGS/97indiv_allchroms_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nocollapsed.vcf.gz
+bedtools subtract -a $VCF_IN -b collapsed.bed -A -header | gzip -c > $VCF_OUT
+bcftools view -H $VCF_OUT | wc -l
+#15841985 loci 97 indivs
+
+module load gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90
+
+#remove any duplicate variants first:
+#Error: Duplicate ID 'PGA_scaffold19__147_contigs__length_54335267:40000000A,G'
+#Error: Duplicate ID 'PGA_scaffold23__167_contigs__length_50329371:5000000A,C'
+#Error: Duplicate ID 'PGA_scaffold25__179_contigs__length_50922480:50000000G,T'
+#generated by --set-missing-var-ids. - these are then put into excl.pos and removed:
+vcftools --exclude-positions excl.pos --gzvcf 97indiv_allchroms_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nocollapsed_nooutgroups.vcf.gz --recode --stdout | gzip -c > 97indiv_allchroms_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nocollapsed_nooutgroups_nodupIDs.vcf.gz
+# says that 15841979 SNPs remain (i.e. 6 removed - 2x each of the duplicated IDs)
+
+##########################
+##########################
+#	5. add additional two macrophthalmus 
+##########################
+##########################
+#plit up input file into many 200000 snp files
+
+split -l 200000 --numeric-suffixes gatk_input_negative.bed snp_set
+for file in snp_set*; do mv "$file" "${file}.bed"; done
+
+ls snp_set* > snp_set_list.txt
+
+
+##now make run_subsetted_gatk.lsf
+
+#!/bin/bash
+
+#Example bsub command:
+#bsub -n1 -W 48:00 -J "regeno[10-30]%20" -R "rusage[mem=20000,scratch=10000] span[hosts=1]" -o /cluster/scratch/rdekayne/regenotyping/regeno_output.txt < /cluster/home/rdekayne/regenotypeing/run_subsetted_gatk.lsf
+##====================================================================================================
+## load modules 
+module load gcc/4.8.2 gdc java/1.8.0_73 gatk/4.0.8.1
+
+##====================================================================================================
+#information for each individual, respectively each bam file
+chrom=${LSB_JOBINDEX}
+snp_set=$(cat /cluster/scratch/rdekayne/regenotyping/snp_set_list.txt | sed -n ${chrom}p)
+
+##====================================================================================================
+###Defining all the paths 
+reference="/cluster/work/gdc/shared/p618/WhitefishRef/Wtdbg2_Whitefish_Chromosome_Level_Assembly/WF_wtdbg2.chr.fasta"
+output="/cluster/scratch/rdekayne/regenotyping"
+samples=""
+
+for i in /cluster/work/gdc/shared/p659/bams_filtered/*.bam; do samples=$samples" -I "$i; done
+java -Xmx8G \
+-jar /cluster/apps/gdc/gatk/4.0.8.1/gatk-package-4.0.8.1-local.jar \
+HaplotypeCaller $samples \
+-R $reference \
+-L ./$snp_set \
+--read-filter MappingQualityReadFilter \
+--minimum-mapping-quality 30 \
+-O $output/$snp_set.vcf.gz
+
+bsub -n1 -W 48:00 -J "regeno[10-30]%20" -R "rusage[mem=6000,scratch=6000] span[hosts=1]" -o /cluster/scratch/rdekayne/regenotyping/regeno_output.txt < /cluster/scratch/rdekayne/regenotyping/run_subsetted_gatk.lsf
+bsub -n1 -W 24:00 -J "regeno[1-9]%20" -R "rusage[mem=6000,scratch=6000] span[hosts=1]" -o /cluster/scratch/rdekayne/regenotyping/regeno_output2.txt < /cluster/scratch/rdekayne/regenotyping/run_subsetted_gatk.lsf
+bsub -n1 -W 24:00 -J "regeno[31-40]%20" -R "rusage[mem=6000,scratch=6000] span[hosts=1]" -o /cluster/scratch/rdekayne/regenotyping/regeno_output3.txt < /cluster/scratch/rdekayne/regenotyping/run_subsetted_gatk.lsf
+bsub -n1 -W 24:00 -J "regeno[41-80]%30" -R "rusage[mem=6000,scratch=6000] span[hosts=1]" -o /cluster/scratch/rdekayne/regenotyping/regeno_output3.txt < /cluster/scratch/rdekayne/regenotyping/run_subsetted_gatk.lsf
+
+ls *.vcf.gz > chromosomes_to_merge_ordered.txt
+bsub -n 1 -W 24:00 -R "rusage[mem=20000]" "module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14; bcftools concat -Ou -f chromosomes_to_merge_ordered.txt | bcftools sort -Oz -o 99indiv_15mil_SNPs_output.vcf.gz"
+
+VCF_IN=99indiv_15mil_SNPs_output.vcf.gz
+VCF_OUT=99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz
+# set filters
+MAC=3
+MISS=1
+QUAL=30
+MIN_DEPTH=3
+MAX_DEPTH=50
+vcftools --gzvcf $VCF_IN \
+--remove-indels --min-alleles 2 --max-alleles 2 --mac $MAC --max-missing $MISS --minQ $QUAL \
+--min-meanDP $MIN_DEPTH --max-meanDP $MAX_DEPTH \
+--minDP $MIN_DEPTH --maxDP $MAX_DEPTH --recode --stdout | gzip -c > \
+$VCF_OUT
+
+wc -l snp*.bed
+#15841979
+
+bcftools view -H $VCF_IN | wc -l
+#15521925
+
+bcftools view -H $VCF_OUT | wc -l
+#14313952
