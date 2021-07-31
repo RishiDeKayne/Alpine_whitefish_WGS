@@ -23,7 +23,7 @@ Scripts span the following analyses:
 - 6.3 CSS
 - 6.4 outlier analysis
 7. f4 statistics
-8.fixed differences (not included in paper)
+8. fixed differences (not included in paper)
 - 8.1 profundus
 - 8.2 nobilis
 9. KEGG differences for fst outlier overlaps
