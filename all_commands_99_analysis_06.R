@@ -1178,6 +1178,7 @@ library(topGO)
 nodeS <- 10
 
 # .tsv with 6 columns: "locus.name","relationship","GO.term","GO.ID","aspect","evidence.code"
+#THE FOLLOWING FILE IS TOO LARGE FOR GITHUB AND WILL BE ARCHIVED ELSEWHERE - PLEASE SEE THE PAPER FOR DETAILS
 GOraw <- read.csv("Parallel/GO_filt.out", sep = " ", stringsAsFactors = F)
 
 #Lucerne
