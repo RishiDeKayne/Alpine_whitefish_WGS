@@ -1,0 +1,100 @@
+﻿Indiv,Spp_thesis,Spp_mod,Lake,fishec_ID,Ecomorph_thesis,ecomorph_mod,standard_length,gill_raker_count,weird,syst_col,lake_col,sex
+2,C. confusus,C.confusus,Biel,123402,Albeli,albeli,232,30,no,blue,paleturquoise2,f
+3,C. confusus,C.confusus,Biel,123404,Albeli,albeli,230,31,no,blue,paleturquoise2,f
+5,C. confusus,C.confusus,Biel,123407,Albeli,albeli,260,29,no,blue,paleturquoise2,f
+6,C. palaea,C.palaea,Biel,123406,Balchen,balchen,340,missing,no,blue,paleturquoise2,m
+7,C. palaea,C.palaea,Biel,123408,Balchen,balchen,313,33,yes,blue,paleturquoise2,f
+10,C. palaea,C.palaea,Biel,123416,Balchen,balchen,283,25,no,blue,paleturquoise2,m
+32,C. albellus,C.albellus,Brienz,123711,Albeli,albeli,115.58,42,no,green,chartreuse2,m
+33,C. albellus,C.albellus,Brienz,123747,Albeli,albeli,121.47,40,no,green,chartreuse2,m
+34,C. albellus,C.albellus,Brienz,123751,Albeli,albeli,117.73,40,no,green,chartreuse2,m
+136,C. alpinus,C.alpinus,Brienz,47518,Balchen,balchen,289.5,29,no,green,chartreuse2,f
+137,C. alpinus,C.alpinus,Brienz,47545,Balchen,balchen,189.5,26,no,green,chartreuse2,m
+93,C. alpinus,C.alpinus,Brienz,124344,Balchen,balchen,231,28,no,green,chartreuse2,f
+38,C. fatioi,C.fatioi,Brienz,124356,Felchen,felchen,196,35,no,green,chartreuse2,f
+39,C. fatioi,C.fatioi,Brienz,124358,Felchen,felchen,216.5,38,no,green,chartreuse2,m
+40,C. fatioi,C.fatioi,Brienz,124359,Felchen,felchen,202,35,no,green,chartreuse2,m
+51,C. steinmanni,C.brienzii,Brienz,123430,Felchen,felchen,207,32,no,green,chartreuse2,m
+53,C. steinmanni,C.brienzii,Brienz,123550,Felchen,felchen,118.08,37,no,green,chartreuse2,f
+134,C. steinmanni,C.brienzii,Brienz,123358,Felchen,felchen,210.5,37,no,green,chartreuse2,f
+55,C. steinmanni,C.brienzii,Brienz,124367,Felchen,felchen,201,37,no,green,chartreuse2,m
+47,C. sp. “Benthic intermediate”,C.benthic_intermediate,Lucerne,28557,Felchen,felchen,251,30,no,pink,#ff4489,f
+48,C. sp. “Benthic intermediate”,C.pelagic_intermediate,Lucerne,28559,Felchen,large_pelagic,237,34,yes,pink,#ff4489,f
+50,C. sp. “Benthic intermediate”,C.benthic_intermediate,Lucerne,28648,Felchen,felchen,265,34,no,pink,#ff4489,m
+114,C. sp. “Bodenbalchen”,C.bodenbalchen,Lucerne,28418,Balchen,balchen,317,27,no,pink,#ff4489,m
+118,C. sp. “Bodenbalchen”,C.bodenbalchen,Lucerne,28449,Balchen,balchen,363,31,no,pink,#ff4489,m
+119,C. sp. “Bodenbalchen”,C.bodenbalchen,Lucerne,28500,Balchen,balchen,312,27,no,pink,#ff4489,m
+103,C. nobilis,C.nobilis,Lucerne,26827,Pelagic profundal,pelagic_profundal,313,39,no,pink,#ff4489,f
+104,C. nobilis,C.nobilis,Lucerne,26833,Pelagic profundal,pelagic_profundal,287,38,no,pink,#ff4489,m
+106,C. nobilis,C.nobilis,Lucerne,26846,Pelagic profundal,pelagic_profundal,274,39,no,pink,#ff4489,m
+107,C. sp. “Pelagic intermediate”,C.pelagic_intermediate,Lucerne,28599,Felchen,large_pelagic,301.5,35,no,pink,#ff4489,f
+108,C. sp. “Pelagic intermediate”,C.pelagic_intermediate,Lucerne,28716,Felchen,large_pelagic,258.5,37,no,pink,#ff4489,m
+109,C. sp. “Pelagic intermediate”,C.pelagic_intermediate,Lucerne,28719,Felchen,large_pelagic,255,33,no,pink,#ff4489,m
+110,C. zugensis,C.zugensis,Lucerne,28486,Albeli,albeli,195,40,no,pink,#ff4489,m
+111,C. zugensis,C.zugensis,Lucerne,28494,Albeli,albeli,174,43,no,pink,#ff4489,f
+113,C. zugensis,C.zugensis,Lucerne,28700,Albeli,albeli,180,38,no,pink,#ff4489,m
+66,C. sp. “Alpnacherfelchen”,C.alpnacherfelchen,Lucerne,26003,Felchen,felchen,269,33,no,pink,#ff4489,m
+68,C. sp. “Alpnacherfelchen”,C.alpnacherfelchen,Lucerne,26020,Felchen,felchen,259,31,no,pink,#ff4489,f
+70,C. sp. “Alpnacherfelchen”,C.alpnacherfelchen,Lucerne,26004,Felchen,felchen,243,33,no,pink,#ff4489,m
+41,C. candidus,C.candidus,Neuenburg,26095,Albeli,albeli,264,36,no,blue,turquoise4,f
+43,C. candidus,C.candidus,Neuenburg,26107,Albeli,albeli,261,36,no,blue,turquoise4,m
+44,C. candidus,C.candidus,Neuenburg,26113,Albeli,albeli,254,34,no,blue,turquoise4,m
+74,C. palaea,C.palaea,Neuenburg,27214,Balchen,balchen,350,27,no,blue,turquoise4,f
+72,C. palaea,C.palaea,Neuenburg,27262,Balchen,balchen,355,27,no,blue,turquoise4,f
+71,C. palaea,C.palaea,Neuenburg,27222,Balchen,balchen,334,28,no,blue,turquoise4,f
+12,C. acrinasus,C.acrinasus,Thun,123125,Felchen,large_pelagic,239.5,33,no,green,chartreuse4,m
+13,C. acrinasus,C.acrinasus,Thun,123147,Felchen,large_pelagic,234,34,no,green,chartreuse4,m
+14,C. acrinasus,C.acrinasus,Thun,123203,Felchen,large_pelagic,234,38,no,green,chartreuse4,m
+61,C. albellus,C.albellus,Thun,123578,Albeli,albeli,246,38,no,green,chartreuse4,f
+63,C. albellus,C.albellus,Thun,123845,Albeli,albeli,176.5,44,no,green,chartreuse4,m
+64,C. albellus,C.albellus,Thun,123902,Albeli,albeli,196,39,no,green,chartreuse4,m
+16,C. alpinus,C.alpinus,Thun,123119,Balchen,balchen,312,27,no,green,chartreuse4,f
+17,C. alpinus,C.alpinus,Thun,123232,Balchen,balchen,343,30,no,green,chartreuse4,m
+19,C. alpinus,C.alpinus,Thun,124028,Balchen,balchen,363.5,28,no,green,chartreuse4,f
+21,C. fatioi,C.fatioi,Thun,123669,Felchen,felchen,225.5,41,no,green,chartreuse4,f
+22,C. fatioi,C.fatioi,Thun,123690,Felchen,felchen,282.5,38,no,green,chartreuse4,m
+23,C. fatioi,C.fatioi,Thun,123693,Felchen,felchen,225,38,no,green,chartreuse4,m
+26,C. profundus,C.profundus,Thun,123235,Benthic profundal,benthic_profundal,315.5,24,no,green,chartreuse4,f
+27,C. profundus,C.profundus,Thun,123265,Benthic profundal,benthic_profundal,266,21,no,green,chartreuse4,f
+29,C. profundus,C.profundus,Thun,123688,Benthic profundal,benthic_profundal,211,21,no,green,chartreuse4,m
+56,C. steinmanni,C.steinmanni,Thun,123130,Balchen,balchen,234,31,no,green,chartreuse4,f
+58,C. steinmanni,C.steinmanni,Thun,123277,Balchen,balchen,218,33,no,green,chartreuse4,m
+59,C .steinmanni,C.steinmanni,Thun,124020,Balchen,balchen,289.5,30,no,green,chartreuse4,m
+76,C. duplex,C.duplex,Walen,175800,Balchen,balchen,352,24,no,purple,mediumpurple1,f
+78,C. duplex,C.duplex,Walen,175805,Balchen,balchen,348,26,no,purple,mediumpurple1,m
+79,C. duplex,C.duplex,Walen,175808,Balchen,balchen,365,25,no,purple,mediumpurple1,m
+81,C. duplex,C.heglingus,Walen,175816,Balchen,albeli,163,35,no,purple,mediumpurple1,m
+82,C. duplex,C.heglingus,Walen,175824,Balchen,albeli,168,31,no,purple,mediumpurple1,m
+83,C. duplex,C.heglingus,Walen,175831,Balchen,albeli,162,30,no,purple,mediumpurple1,f
+86,C. heglingus,C.duplex,Walen,175863,Albeli,balchen,302,25,no,purple,mediumpurple1,m
+87,C. heglingus,C.duplex,Walen,175864,Albeli,balchen,301,23,no,purple,mediumpurple1,f
+90,C. heglingus,C.duplex,Walen,175898,Albeli,balchen,292,21,no,purple,mediumpurple1,m
+94,C. duplex,C.duplex,Zurich,175411,Balchen,balchen,455,25,no,purple,purple4,f
+95,C. duplex,C.duplex,Zurich,175412,Balchen,balchen,454,31,no,purple,purple4,f
+96,C. duplex,C.duplex,Zurich,175410,Balchen,balchen,337,26,no,purple,purple4,m
+97,C. zuerichensis,C.zuerichensis,Zurich,175401,Felchen,felchen,238,31,yes,purple,purple4,m
+98,C. zuerichensis,C.zuerichensis,Zurich,175402,Felchen,felchen,221,32,yes,purple,purple4,m
+99,C. zuerichensis,C.zuerichensis,Zurich,175403,Felchen,felchen,250,28,yes,purple,purple4,missing
+100,C. heglingus,C.zuerichensis,Zurich,175405,Albeli,felchen,238,32,yes,purple,purple4,m
+101,C. heglingus,C.heglingus,Zurich,175407,Albeli,albeli,224,32,yes,purple,purple4,f
+102,C. heglingus,C.zuerichensis,Zurich,175408,Albeli,felchen,238,30,yes,purple,purple4,m
+903,C. albula,C.albula,Lake Stechlin,Alb06,-,none,missing,missing,no,black,black,missing
+904,C. albula,C.albula,Lake Stechlin,Alb10,-,none,missing,missing,no,black,black,missing
+906,C. holsatus ,C.holsatus,Drewitzee,GM02A,Balchen,balchen,missing,missing,no,black,black,missing
+911,C. holsatus ,C.holsatus,Drewitzee,GM07A,Balchen,balchen,missing,missing,no,black,black,missing
+907,C. maraenoides ,C.maraeonoides,Schaalsee,GM21A,Albeli,albeli,missing,missing,no,black,black,missing
+908,C. maraenoides ,C.maraeonoides,Schaalsee,GM22A,Albeli,albeli,missing,missing,no,black,black,missing
+909,C. lavaretus,C.lavaretus,Muddus,ML1,-,none,missing,missing,no,black,black,missing
+910,C. lavaretus,C.lavaretus,Muddus,ML2,-,none,missing,missing,no,black,black,missing
+121,C. wartmanii,C.wartmanii,Constance,123454,Large Pelagic,large_pelagic,288,36 ,no,yellow,goldenrod,f
+122,C. wartmanii,C.wartmanii,Constance,123455,Large Pelagic,large_pelagic,285,37 ,no,yellow,goldenrod,f
+123,C. wartmanii,C.wartmanii,Constance,123460,Large Pelagic,large_pelagic,277.5,36 ,no,yellow,goldenrod,f
+126,C. arenicolus,C.arenicolus,Constance,123462,Balchen,balchen,325.5,30 ,no,yellow,goldenrod,f
+127,C. arenicolus,C.arenicolus,Constance,123463,Balchen,balchen,315,26 ,no,yellow,goldenrod,f
+128,C. arenicolus,C.arenicolus,Constance,123475,Balchen,balchen,307.5,33 ,no,yellow,goldenrod,f
+129,C. alpinus,C.alpinus,Thun,123148,Balchen,balchen,249,26,yes,green,chartreuse4,m
+131,C. wartmanii,C.wartmanii,Constance,123457,Large Pelagic,large_pelagic,263,37,no,yellow,goldenrod,f
+132,C. macrophthalmus,C.macrophthalmus,Constance,123471,Felchen,felchen,257,36,no,yellow,goldenrod,f
+999,C. steinmanni,C.steinmanni,Thun,124422,Balchen,balchen,missing,32,no,green,chartreuse4,f
+123458,C. macrophthalmus,C.macrophthalmus,Constance,123458,Felchen,felchen,262,39,no,yellow,goldenrod,m
+123470,C. macrophthalmus,C.macrophthalmus,Constance,123470,Felchen,felchen,210,36,no,yellow,goldenrod,f
