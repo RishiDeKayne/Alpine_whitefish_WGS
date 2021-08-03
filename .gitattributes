@@ -3,3 +3,4 @@
 */*.fst linguist-vendored=false
 */*.txt linguist-vendored=false
 */*.Q linguist-vendored=false
+Parallel/*.fst linguist-vendored=false
