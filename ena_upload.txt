@@ -84,3 +84,31 @@ do
    rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
 done
 
+#########
+## BATCH 4
+#########
+## declare list of individuals
+declare -a arr=("026" "027" "029" "032" "033")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   scp /cluster/work/gdc/shared/p659/data/newnamed/"$i"* /cluster/scratch/rdekayne/ena_upload/
+done
+
+module load eth_proxy
+lftp 
+open webin.ebi.ac.uk
+user Webin-53156 
+mput *
+
+declare -a arr=("026" "027" "029" "032" "033")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
+done
+
