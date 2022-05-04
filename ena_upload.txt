@@ -168,3 +168,88 @@ do
    rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
 done
 
+#########
+## BATCH 7
+#########
+## declare list of individuals
+declare -a arr=("051" "053" "055" "056" "058")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   scp /cluster/work/gdc/shared/p659/data/newnamed/"$i"* /cluster/scratch/rdekayne/ena_upload/
+done
+
+module load eth_proxy
+lftp 
+open webin.ebi.ac.uk
+user Webin-53156 
+mput *
+
+declare -a arr=("051" "053" "055" "056" "058")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
+done
+
+
+#########
+## BATCH 8
+#########
+## declare list of individuals
+declare -a arr=("059" "061" "063" "064" "066")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   scp /cluster/work/gdc/shared/p659/data/newnamed/"$i"* /cluster/scratch/rdekayne/ena_upload/
+done
+
+module load eth_proxy
+lftp 
+open webin.ebi.ac.uk
+user Webin-53156 
+mput *
+
+declare -a arr=("059" "061" "063" "064" "066")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
+done
+
+
+#########
+## BATCH 9
+#########
+## declare list of individuals
+declare -a arr=("068" "070" "071" "072" "074")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   scp /cluster/work/gdc/shared/p659/data/newnamed/"$i"* /cluster/scratch/rdekayne/ena_upload/
+done
+
+module load eth_proxy
+lftp 
+open webin.ebi.ac.uk
+user Webin-53156 
+mput *
+
+declare -a arr=("068" "070" "071" "072" "074")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
+done
