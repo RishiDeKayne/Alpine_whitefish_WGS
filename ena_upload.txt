@@ -19,14 +19,6 @@ open webin.ebi.ac.uk
 user Webin-53156 
 mput *
 
-declare -a arr=("002" "003" "005" "006" "007")
-
-## loop through array copying to scratch - start with 2
-for i in "${arr[@]}"
-do
-   echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
-done
 
 #########
 ## BATCH 2
@@ -47,15 +39,6 @@ open webin.ebi.ac.uk
 user Webin-53156 
 mput *
 
-declare -a arr=("010" "012" "013" "014" "016")
-
-## loop through array copying to scratch - start with 2
-for i in "${arr[@]}"
-do
-   echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
-done
-
 #########
 ## BATCH 3
 #########
@@ -75,14 +58,6 @@ open webin.ebi.ac.uk
 user Webin-53156 
 mput *
 
-declare -a arr=("017" "019" "021" "022" "023")
-
-## loop through array copying to scratch - start with 2
-for i in "${arr[@]}"
-do
-   echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
-done
 
 #########
 ## BATCH 4
@@ -103,14 +78,6 @@ open webin.ebi.ac.uk
 user Webin-53156 
 mput *
 
-declare -a arr=("026" "027" "029" "032" "033")
-
-## loop through array copying to scratch - start with 2
-for i in "${arr[@]}"
-do
-   echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
-done
 
 #########
 ## BATCH 5
@@ -131,14 +98,6 @@ open webin.ebi.ac.uk
 user Webin-53156 
 mput *
 
-declare -a arr=("034" "038" "039" "040" "041")
-
-## loop through array copying to scratch - start with 2
-for i in "${arr[@]}"
-do
-   echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
-done
 
 #########
 ## BATCH 6
@@ -159,14 +118,6 @@ open webin.ebi.ac.uk
 user Webin-53156 
 mput *
 
-declare -a arr=("043" "044" "047" "048" "050")
-
-## loop through array copying to scratch - start with 2
-for i in "${arr[@]}"
-do
-   echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
-done
 
 #########
 ## BATCH 7
@@ -186,15 +137,6 @@ lftp
 open webin.ebi.ac.uk
 user Webin-53156 
 mput *
-
-declare -a arr=("051" "053" "055" "056" "058")
-
-## loop through array copying to scratch - start with 2
-for i in "${arr[@]}"
-do
-   echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
-done
 
 
 #########
@@ -216,15 +158,6 @@ open webin.ebi.ac.uk
 user Webin-53156 
 mput *
 
-declare -a arr=("059" "061" "063" "064" "066")
-
-## loop through array copying to scratch - start with 2
-for i in "${arr[@]}"
-do
-   echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
-done
-
 
 #########
 ## BATCH 9
@@ -245,11 +178,78 @@ open webin.ebi.ac.uk
 user Webin-53156 
 mput *
 
-declare -a arr=("068" "070" "071" "072" "074")
+#########
+## BATCH 10
+#########
+## declare list of individuals
+declare -a arr=("076" "078" "079" "081" "082" "083" "086" "087" "090" "093")
 
 ## loop through array copying to scratch - start with 2
 for i in "${arr[@]}"
 do
    echo "$i"
-   rm /cluster/work/gdc/shared/p659/data/newnamed/"$i"*
+   scp /cluster/work/gdc/shared/p659/data/newnamed/"$i"* /cluster/scratch/rdekayne/ena_upload/
 done
+
+module load eth_proxy
+lftp 
+open webin.ebi.ac.uk
+user Webin-53156 
+mput *
+
+#########
+## BATCH 11
+#########
+## declare list of individuals
+declare -a arr=("094" "095" "096" "097" "098" "099" "100" "101" "102" "103")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   scp /cluster/work/gdc/shared/p659/data/newnamed/"$i"* /cluster/scratch/rdekayne/ena_upload/
+done
+
+module load eth_proxy
+lftp 
+open webin.ebi.ac.uk
+user Webin-53156 
+mput *
+
+#########
+## BATCH 12
+#########
+## declare list of individuals
+declare -a arr=("104" "106" "107" "108" "109" "110" "111" "113" "114" "118")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   scp /cluster/work/gdc/shared/p659/data/newnamed/"$i"* /cluster/scratch/rdekayne/ena_upload/
+done
+
+module load eth_proxy
+lftp 
+open webin.ebi.ac.uk
+user Webin-53156 
+mput *
+
+#########
+## BATCH 13
+#########
+## declare list of individuals
+declare -a arr=("119" "129" "134" "136" "137" "903" "904" "906" "907" "908" "909" "910" "911")
+
+## loop through array copying to scratch - start with 2
+for i in "${arr[@]}"
+do
+   echo "$i"
+   scp /cluster/work/gdc/shared/p659/data/newnamed/"$i"* /cluster/scratch/rdekayne/ena_upload/
+done
+
+module load eth_proxy
+lftp 
+open webin.ebi.ac.uk
+user Webin-53156 
+mput *
