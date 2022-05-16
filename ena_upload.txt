@@ -1,5 +1,7 @@
 #use login node - copy files to scratch and upload from there
 
+#for spreadsheet showing sample numbers/fishec IDs/ENA codes see file fastq2_filled_RDK.tsv
+
 #########
 ## BATCH 1
 #########
