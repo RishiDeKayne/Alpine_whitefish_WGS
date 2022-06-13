@@ -9,10 +9,7 @@ Scripts span the following analyses:
 - 1.2 Individual lakes
 2. RAxML
 3. Admixture
-4. Dsuites
-- 4.1 Large pelagic introgression?
-- 4.2 Profundal - C. profundus and C. nobilis introgression?
-- 4.3 C. acrinasus in Thun - does it have Thun alleles or just constance fish there?
+4. Dsuites - dataset-wide f-branch stats
 5. GWAS
 - 5.1 Gill raker count
 - 5.2 Sex
