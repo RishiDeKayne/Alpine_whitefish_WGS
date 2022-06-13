@@ -1376,6 +1376,207 @@ plink --vcf All_342_allsnps.vcf.gz --double-id --allow-extra-chr --set-missing-v
 
 ##and download All_342_allsnps_filt.eigenval and All_342_allsnps_filt.eigenvec for R script to plot pcas
 
+##repeat for review with permuted outliers:
+## 6.4 - 1659 outlier analysis
+#similar analysis as with 342 windows
+
+../Dropbox/RishiMAC/99_reanalysis/Parallel/CSS_1percent_outliers_1659_permuted_FDR.csv rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_permuted_outliers
+
+#output of neighbouring windows written to: CSS_1percent_outliers_1659_permuted_FDR.csv
+
+#then we want to use the identified outlier windows to see what genes are present in them using the genome annotation:
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+#scaffoldannotation2.bed is a filtered version of the annotations on scaffolds - 42695 lines - see David analysis for further information
+#GO.out is list of go terms from annotation - 390699 lines
+
+cp ../../parallel/Parallel_CSS_outliers/scaffoldannotation2.bed .
+cp ../../parallel/Parallel_CSS_outliers/GO.out .
+
+#use CSS_1percent_outliers.csv but need to convert to tabs
+sed -E 's/("([^"]*)")?,/\2\t/g' CSS_1percent_outliers_1659_permuted_FDR.csv > CSS_1percent_outliers_1659_permuted_FDR.tsv
+
+#and remove first header line
+tail -n +2 CSS_1percent_outliers_1659_permuted_FDR.tsv > CSS_1percent_outliers_1659_permuted_FDR.bed
+
+#find overlap with bedtools to find annotations which fit within windows
+bedtools intersect -a ./CSS_1percent_outliers_1659_permuted_FDR.bed \
+    -b ./scaffoldannotation2.bed -wa -wb > extractedannotation_1659.txt
+        
+#make file with just the gene names
+#extract row 15 with gene name, split into two columns with ; then extract second bit and then remove the name= bit to leave gene name
+awk '{print $12}' extractedannotation_1659.txt | awk -F";" '$1=$1' OFS="\t" | awk '{print $2}' | sed 's/Name=//g' > gene_names1659.txt
+
+#now loop through GO.out to extract info for each gene name
+wc -l gene_names1659.txt
+#1800
+
+for i in {1..1800}
+do
+   genename=$(sed "${i}q;d" gene_names1659.txt)
+   echo ${genename} 
+   grep "${genename}" GO.out >> shared_outlier1659_GOannotations.txt
+done
+
+#17276 go annotations for the 356 genes that fall within adjacent css outlier windows
+#analysis of gene ontology of outliers
+cat GO.out | awk '{print $1,$2,"GO:"$3, $4}' > GO_filt.out
+
+##now we need GO_filt.out and gene_names1659.txt for GO enrichment script - R 6.4
+
+#now look at PCA with all indivs
+awk '{print $1,$2,$3}' ./CSS_1percent_outliers_1659_permuted_FDR.bed > 1659_windows.bed
+
+#this time use --remove to remove outgroups
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50_nooutgroups.vcf.gz --bed ./1659_windows.bed --recode --stdout | gzip -c > All_1659_allsnps.vcf.gz
+
+#how many markers:
+bcftools view -H All_1659_allsnps.vcf.gz | wc -l
+#690101
+
+#use plink to filter markers and then produce PCAs
+module load gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf All_1659_allsnps.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out All_1659_allsnps_filt
+
+# prune and create pca
+plink --vcf All_1659_allsnps.vcf.gz --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract All_1659_allsnps_filt.prune.in \
+--make-bed --pca --out All_1659_allsnps_filt
+#56127 variants and 91 people pass filters and QC.
+
+##and download All_342_allsnps_filt.eigenval and All_342_allsnps_filt.eigenvec for R script to plot pcas
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_permuted_outliers/*.eigen* ../Dropbox/RishiMAC/99_reanalysis/reviewer_responses/
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_permuted_outliers/gene_names1659.txt ../Dropbox/RishiMAC/99_reanalysis/reviewer_responses/
+
+mkdir CSS_outgroups
+mkdir CSS_noscaff22
+mkdir CSS_noparallel
+
+#####and now do the same but keep outgroups:
+cd /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/CSS_outgroups
+
+#use --remove remove.indivs.txt to remove outgroups with no known ecomorph i.e.
+#0909
+#0910
+#0903
+#0904
+
+cp ../../CSS_permuted_outliers/1659_windows.bed .
+vcftools --gzvcf /cluster/scratch/rdekayne/99_reanalysis/vcfs/99indiv_15mil_SNPs_output_filt_mac3_miss1_qual30_mindepth3_maxdepth50.vcf.gz --bed ./1659_windows.bed --remove remove.indivs.txt --recode --stdout | gzip -c > All_1659_allsnps_woutgroups.vcf.gz
+
+#how many markers:
+bcftools view -H All_1659_allsnps_woutgroups.vcf.gz | wc -l
+#690101
+
+#use plink to filter markers and then produce PCAs
+module load gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf All_1659_allsnps_woutgroups.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out All_1659_allsnps_wout_filt
+
+# prune and create pca
+plink --vcf All_1659_allsnps_woutgroups.vcf.gz --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract All_1659_allsnps_wout_filt.prune.in \
+--make-bed --pca --out All_1659_allsnps_wout_filt
+#57977 variants and 95 people pass filters and QC.
+
+
+##and download All_1659_allsnps_wout_filt.eigenval and All_1659_allsnps_wout_filt.eigenvec for R script to plot pcas
+
+#####and now do the same as original but remove markers on emmax associated peak:
+cd /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/CSS_noscaff22
+
+cp ../../CSS_permuted_outliers/1659_windows.bed .
+
+#this time remove PGA_scaffold22__199_contigs__length_52020451
+
+cat remove_scaff22.bed 
+#chrom	chromStart	chromEnd
+#PGA_scaffold22__199_contigs__length_52020451	1	52020451
+
+cp ../../CSS_permuted_outliers/All_1659_allsnps.vcf.gz .
+
+vcftools --gzvcf All_1659_allsnps.vcf.gz --exclude-bed remove_scaff22.bed --recode --stdout | gzip -c > All_1659_allsnps_noGRCpeak.vcf.gz
+
+#how many markers:
+bcftools view -H All_1659_allsnps_noGRCpeak.vcf.gz | wc -l
+#661982
+
+#use plink to filter markers and then produce PCAs
+module load gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf All_1659_allsnps_noGRCpeak.vcf.gz --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out All_1659_allsnps_noGRCpeak_filt
+
+# prune and create pca
+plink --vcf All_1659_allsnps_noGRCpeak.vcf.gz --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract All_1659_allsnps_noGRCpeak_filt.prune.in \
+--make-bed --pca --out All_1659_allsnps_noGRCpeak_filt
+#54057 variants and 91 people pass filters and QC.
+
+##and download All_1659_allsnps_noGRCpeak_filt.eigenval and All_1659_allsnps_noGRCpeak_filt.eigenvec for R script to plot pcas
+
+#also remove the parallel individuals and run again:
+#Do PCA of CS' outlier windows excluding balchen/albeli included in finding windows?
+cd /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/CSS_noparallel
+cp ../../CSS_permuted_outliers/All_1659_allsnps.vcf.gz .
+
+#want to filter the All_1659_allsnps.vcf.gz to exclude the individuals in our parallel test:
+
+exclude.txt:
+032
+033
+034
+041
+043
+044
+0110
+0111
+0113
+081
+082
+083
+0136
+0137
+093
+074
+072
+071
+0114
+0118
+0119
+076
+078
+079
+
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+vcftools --gzvcf ./All_1659_allsnps.vcf.gz  --remove ./exclude.txt --recode --out 1659_excl_parallel
+#After filtering, kept 67 out of 91 Individuals
+#Outputting VCF file...
+#After filtering, kept 690101 out of a possible 690101 Sites
+
+# perform linkage pruning - i.e. identify prune sites
+plink --vcf 1659_excl_parallel.recode.vcf --double-id --allow-extra-chr \
+--set-missing-var-ids @:# \
+--indep-pairwise 50 10 0.1 --out 1659_excl_parallel_filt
+
+# prune and create pca
+plink --vcf 1659_excl_parallel.recode.vcf --double-id --allow-extra-chr --set-missing-var-ids @:# \
+--extract 1659_excl_parallel_filt.prune.in \
+--make-bed --pca --out 1659_excl_parallel_filt
+#52192 variants and 67 people pass filters and QC.
+
 #####and now do the same but keep outgroups:
 #/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS_outliers_woutgroups
 #use --remove remove.indivs.txt to remove outgroups with no known ecomorph i.e.
