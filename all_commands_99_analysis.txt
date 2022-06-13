@@ -1545,6 +1545,297 @@ scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Para
 scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/all_CSS_output50000basepair50000step.window.pca.full_noheaders.txt .
 scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/all_CSS_output_500kpermutations_50000basepair50000step.window.pca.full_noheaders.txt .
 
+##refined CSS analysis following reviewer comments:
+#### new css approach
+mkdir CSS_new_approach && cd CSS_new_approach/
+scp *_beta* rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach
+
+cp /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/*.vcf .
+cp /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/*.list .
+cp /cluster/scratch/rdekayne/99_reanalysis/parallel/Parallel_CSS/*.popfile .
+
+cp full.popfile full.groupfile
+
+#edit to add column with lake IDs
+
+#test on one vcf
+bsub -W 4:00 -Is /bin/bash
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+module load new gcc/4.8.2 r/3.6.0
+
+#test
+Rscript --vanilla CSSm_beta20211130.R VCF_PGA_scaffold9__196_contigs__length_60468309.recode.vcf full.groupfile 50000 50000 10 basepair pca 0.05
+
+###runCSS.lsf
+#!/bin/bash
+
+#load modules
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+module load new gcc/4.8.2 r/3.6.0
+
+#identify parameters:
+run_numb=${LSB_JOBINDEX}
+
+#get vcfs:
+vcf_name=$(cat ./vcf.list | sed -n ${run_numb}p)
+
+#run R script
+Rscript --vanilla CSSm_beta20211130.R ${vcf_name} full.groupfile 50000 50000 10 basepair pca 0.05
+#
+
+#and run all
+bsub -n1 -W 4:00 -J "runCSS[1-36]%10" -R "rusage[mem=5000]" < /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/runCSS.lsf
+
+#get max values
+for filename in *.50000basepair50000step.window.pca.full.CSSm.txt; do
+	echo ${filename}
+	tail -n +2 ${filename} | awk 'BEGIN {max = 0} {if ($5>max) max=$5} END {print max}'
+done 
+
+#now combine in one file so we can plot with fst
+cat VCF_PGA_scaffold0__352_contigs__length_93459789_part1.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold0__352_contigs__length_93459789_part2.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold1__210_contigs__length_43329510.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold2__176_contigs__length_42764345.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold3__454_contigs__length_92224161.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold4__243_contigs__length_45591172.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold5__223_contigs__length_43692974.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold6__535_contigs__length_65391737.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold7__351_contigs__length_68138733.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold8__181_contigs__length_65193448.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold9__196_contigs__length_60468309.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold10__182_contigs__length_63177489.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold11__203_contigs__length_63881516.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold12__167_contigs__length_57740044.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold13__147_contigs__length_47256133.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold14__173_contigs__length_55641933.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold15__168_contigs__length_54025139.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold16__334_contigs__length_54216998.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold17__183_contigs__length_51949489.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold18__164_contigs__length_59907985.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold19__147_contigs__length_54335267.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold20__181_contigs__length_52945597.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold22__199_contigs__length_52020451.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold23__167_contigs__length_50329371.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold24__152_contigs__length_51033154.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold25__179_contigs__length_50922480.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold26__192_contigs__length_48683376.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold28__172_contigs__length_48977775.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold29__157_contigs__length_48675208.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold30__165_contigs__length_48446552.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold32__183_contigs__length_44662967.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold33__143_contigs__length_40727438.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold35__141_contigs__length_42009912.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold36__136_contigs__length_43663377.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold38__206_contigs__length_33962415.recode.50000basepair50000step.window.pca.full.CSSm.txt \
+VCF_PGA_scaffold39__3_contigs__length_1094305.recode.50000basepair50000step.window.pca.full.CSSm.txt > all_CSS_output50000basepair50000step.window.pca.full.txt
+
+#now remove header line for each case:
+tail -n +2 all_CSS_output50000basepair50000step.window.pca.full.txt | grep -v "css" > all_CSS_output50000basepair50000step.window.pca.full_noheaders.txt
+
+#and check max value
+cat all_CSS_output50000basepair50000step.window.pca.full_noheaders.txt | awk 'BEGIN {max = 0} {if ($5>max) max=$5} END {print max}'
+
+#now we want to run permutation script:CSSm_permutation_beta20211130.R 
+
+#first create dmat_files.txt
+ls *.dmat.gz > dmat_files.txt
+
+#and textfiles.txt
+ls *.CSSm.txt > textfiles.txt
+
+#test
+Rscript --vanilla CSSm_permutation_beta20211130.R VCF_PGA_scaffold9__196_contigs__length_60468309.recode.vcf VCF_PGA_scaffold9__196_contigs__length_60468309.recode.50000basepair50000step.window.pca.full.CSSm.dmat.gz VCF_PGA_scaffold9__196_contigs__length_60468309.recode.50000basepair50000step.window.pca.full.CSSm.txt full.groupfile 500000
+
+
+#runCSSpermutations.lsf
+#!/bin/bash
+
+#load modules
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+module load new gcc/4.8.2 r/3.6.0
+
+#identify parameters:
+run_numb=${LSB_JOBINDEX}
+
+#get vcfs:
+vcf_name=$(cat ./vcf.list | sed -n ${run_numb}p)
+dmat_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/dmat_files.txt | sed -n ${run_numb}p)
+text_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/textfiles.txt | sed -n ${run_numb}p)
+
+#run R script
+Rscript --vanilla CSSm_permutation_beta20211130.R ${vcf_name} ${dmat_name} ${text_name} full.groupfile 100000
+#
+
+bsub -n1 -W 4:00 -J "runCSS[1-36]%5" -R "rusage[mem=18000]" < ./runCSSpermutations.lsf
+
+#now combine in one file so we can plot with fst
+cat VCF_PGA_scaffold0__352_contigs__length_93459789_part1.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold0__352_contigs__length_93459789_part2.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold1__210_contigs__length_43329510.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold2__176_contigs__length_42764345.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold3__454_contigs__length_92224161.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold4__243_contigs__length_45591172.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold5__223_contigs__length_43692974.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold6__535_contigs__length_65391737.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold7__351_contigs__length_68138733.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold8__181_contigs__length_65193448.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold9__196_contigs__length_60468309.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold10__182_contigs__length_63177489.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold11__203_contigs__length_63881516.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold12__167_contigs__length_57740044.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold13__147_contigs__length_47256133.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold14__173_contigs__length_55641933.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold15__168_contigs__length_54025139.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold16__334_contigs__length_54216998.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold17__183_contigs__length_51949489.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold18__164_contigs__length_59907985.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold19__147_contigs__length_54335267.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold20__181_contigs__length_52945597.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold22__199_contigs__length_52020451.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold23__167_contigs__length_50329371.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold24__152_contigs__length_51033154.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold25__179_contigs__length_50922480.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold26__192_contigs__length_48683376.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold28__172_contigs__length_48977775.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold29__157_contigs__length_48675208.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold30__165_contigs__length_48446552.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold32__183_contigs__length_44662967.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold33__143_contigs__length_40727438.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold35__141_contigs__length_42009912.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold36__136_contigs__length_43663377.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold38__206_contigs__length_33962415.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold39__3_contigs__length_1094305.recode.50000basepair50000step.window.pca.full.CSSm.100000perm.txt > all_CSS_output_100kpermutations_50000basepair50000step.window.pca.full.txt
+
+tail -n +2 all_CSS_output_100kpermutations_50000basepair50000step.window.pca.full.txt | grep -v "css" > all_CSS_output_100kpermutations_50000basepair50000step.window.pca.full_noheaders.txt
+
+#download css and fst
+scp rdekayne@euler.ethz.ch:/cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/all_CSS_output_100kpermutations_50000basepair50000step.window.pca.full_noheaders.txt .
+
+
+###mds test
+#change filepaths
+bsub -n1 -W 4:00 -J "runCSS[1-36]%10" -R "rusage[mem=5000]" < /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/mds_RUN/runCSS.lsf
+
+for filename in *.50000basepair50000step.window.mds.full.CSSm.txt; do
+	echo ${filename}
+	tail -n +2 ${filename} | awk 'BEGIN {max = 0} {if ($5>max) max=$5} END {print max}'
+done 
+
+#now combine in one file so we can plot with fst
+cat VCF_PGA_scaffold0__352_contigs__length_93459789_part1.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold0__352_contigs__length_93459789_part2.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold1__210_contigs__length_43329510.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold2__176_contigs__length_42764345.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold3__454_contigs__length_92224161.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold4__243_contigs__length_45591172.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold5__223_contigs__length_43692974.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold6__535_contigs__length_65391737.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold7__351_contigs__length_68138733.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold8__181_contigs__length_65193448.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold9__196_contigs__length_60468309.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold10__182_contigs__length_63177489.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold11__203_contigs__length_63881516.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold12__167_contigs__length_57740044.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold13__147_contigs__length_47256133.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold14__173_contigs__length_55641933.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold15__168_contigs__length_54025139.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold16__334_contigs__length_54216998.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold17__183_contigs__length_51949489.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold18__164_contigs__length_59907985.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold19__147_contigs__length_54335267.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold20__181_contigs__length_52945597.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold22__199_contigs__length_52020451.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold23__167_contigs__length_50329371.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold24__152_contigs__length_51033154.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold25__179_contigs__length_50922480.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold26__192_contigs__length_48683376.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold28__172_contigs__length_48977775.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold29__157_contigs__length_48675208.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold30__165_contigs__length_48446552.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold32__183_contigs__length_44662967.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold33__143_contigs__length_40727438.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold35__141_contigs__length_42009912.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold36__136_contigs__length_43663377.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold38__206_contigs__length_33962415.recode.50000basepair50000step.window.mds.full.CSSm.txt \
+VCF_PGA_scaffold39__3_contigs__length_1094305.recode.50000basepair50000step.window.mds.full.CSSm.txt > all_CSS_output50000basepair50000step.window.mds.full.txt
+
+#now remove header line for each case:
+tail -n +2 all_CSS_output50000basepair50000step.window.mds.full.txt | grep -v "css" > all_CSS_output50000basepair50000step.window.mds.full_noheaders.txt
+
+#and check max value
+cat all_CSS_output50000basepair50000step.window.mds.full_noheaders.txt | awk 'BEGIN {max = 0} {if ($5>max) max=$5} END {print max}'
+
+#now we want to run permutation script:CSSm_permutation_beta20211130.R 
+
+#first create dmat_files.txt
+ls *.dmat.gz > dmat_files.txt
+
+#and textfiles.txt
+ls *.CSSm.txt > textfiles.txt
+
+#runCSSpermutations.lsf
+#!/bin/bash
+
+#load modules
+module load java gdc gcc/4.8.2 gdc zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14
+module load new gcc/4.8.2 r/3.6.0
+
+#identify parameters:
+run_numb=${LSB_JOBINDEX}
+
+#get vcfs:
+vcf_name=$(cat ./vcf.list | sed -n ${run_numb}p)
+dmat_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/dmat_files.txt | sed -n ${run_numb}p)
+text_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/CSS_new_approach/textfiles.txt | sed -n ${run_numb}p)
+
+#run R script
+Rscript --vanilla CSSm_permutation_beta20211130.R ${vcf_name} ${dmat_name} ${text_name} full.groupfile 100000
+#
+
+bsub -n1 -W 4:00 -J "runCSS[1-36]%5" -R "rusage[mem=18000]" < ./runCSSpermutations.lsf
+
+#now combine in one file so we can plot with fst
+cat VCF_PGA_scaffold0__352_contigs__length_93459789_part1.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold0__352_contigs__length_93459789_part2.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold1__210_contigs__length_43329510.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold2__176_contigs__length_42764345.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold3__454_contigs__length_92224161.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold4__243_contigs__length_45591172.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold5__223_contigs__length_43692974.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold6__535_contigs__length_65391737.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold7__351_contigs__length_68138733.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold8__181_contigs__length_65193448.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold9__196_contigs__length_60468309.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold10__182_contigs__length_63177489.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold11__203_contigs__length_63881516.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold12__167_contigs__length_57740044.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold13__147_contigs__length_47256133.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold14__173_contigs__length_55641933.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold15__168_contigs__length_54025139.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold16__334_contigs__length_54216998.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold17__183_contigs__length_51949489.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold18__164_contigs__length_59907985.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold19__147_contigs__length_54335267.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold20__181_contigs__length_52945597.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold22__199_contigs__length_52020451.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold23__167_contigs__length_50329371.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold24__152_contigs__length_51033154.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold25__179_contigs__length_50922480.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold26__192_contigs__length_48683376.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold28__172_contigs__length_48977775.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold29__157_contigs__length_48675208.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold30__165_contigs__length_48446552.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold32__183_contigs__length_44662967.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold33__143_contigs__length_40727438.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold35__141_contigs__length_42009912.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold36__136_contigs__length_43663377.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold38__206_contigs__length_33962415.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt \
+VCF_PGA_scaffold39__3_contigs__length_1094305.recode.50000basepair50000step.window.mds.full.CSSm.100000perm.txt > all_CSS_output_100kpermutations_50000basepair50000step.window.mds.full.txt
+
+tail -n +2 all_CSS_output_100kpermutations_50000basepair50000step.window.mds.full.txt | grep -v "css" > all_CSS_output_100kpermutations_50000basepair50000step.window.mds.full_noheaders.txt
+
+
 
 ## 6.4 outlier analysis
 #similar analysis with 342 windows
