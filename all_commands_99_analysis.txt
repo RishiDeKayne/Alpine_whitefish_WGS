@@ -473,6 +473,245 @@ cat Con_Con_Thun_filt_noprof.txt  | tr "\\t" "," > Con_Con_Thun_filt_noprof.csv
 
 #and download  acr_con_thun_filt_all_noprof.csv and Con_Con_Thun_filt_noprof.csv
 
+###refined analysis in response to reviewers for dataset-wide f-branch stats:
+#D/fbranch stat:
+#this time speficying the tree:
+
+cp /cluster/scratch/rdekayne/99_reanalysis/RAxML/RAxML500bp/RAxML_bestTree.99.GTRGAMMA.raxmlout .
+
+mv RAxML_bestTree.99.GTRGAMMA.raxmlout TREE_FILE.nwk 
+
+#rename individuals according to sets.txt file for dsuite
+
+#in R
+library(ape)
+tree <- read.tree("../99_reanalysis/reviewer_responses/Tree_renamed_for_Dsuite2.nwk")
+write.tree(tree)
+species<-c("Outgroup1", "Outgroup2", "Outgroup3", "Outgroup4", "Outgroup5", "Outgroup6", "Outgroup7")
+pruned.tree<-drop.tip(tree,tree$tip.label[match(species, tree$tip.label)])
+write.tree(pruned.tree)
+
+sed -i 's/C./C/g' dsuites_input.txt
+
+git clone https://github.com/millanek/Dsuite.git
+cd Dsuite/
+make 
+
+#Do all dsuite calcs with new tree 
+
+#!/bin/bash
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+# define jobindex
+chrom_numb=${LSB_JOBINDEX}
+# find individual name corresponding with the job index number in a file
+chrom_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/Dstats/chrom.list | sed -n ${chrom_numb}p)
+
+#and the start of the output dir which will be followed by the specific lake
+output_dir=/cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/dstats/full_rerun/
+
+# call dsuites tiros
+../Dsuite/Build/Dsuite Dtrios -n ${chrom_name} --tree=../pruned_tree_fbranch_input.nwk /cluster/scratch/rdekayne/99_reanalysis/Dstats/chromosome_vcfs/${chrom_name}.vcf.gz /cluster/scratch/rdekayne/99_reanalysis/Dstats/dsuites_input.txt
+
+bsub -n1 -W 4:00 -J "chr_ext[1]%15" -R "rusage[mem=3000]" < ./run_Dsuites_on_chromosomes.lsf 
+bsub -n1 -W 4:00 -J "chr_ext[2-40]%15" -R "rusage[mem=3000]" < ./run_Dsuites_on_chromosomes.lsf 
+
+now remove the full chromosomes that are collapsed and should be empty
+rm *PGA_scaffold21__417_contigs__length_56862223*.txt
+rm *PGA_scaffold27__289_contigs__length_46671285*.txt
+rm *PGA_scaffold31__196_contigs__length_44616205*.txt
+rm *PGA_scaffold34__308_contigs__length_42609905*.txt
+rm *PGA_scaffold37__332_contigs__length_36774138*.txt
+
+#now merge output from all chromosomes (35/40)
+#combine data from all chromosomes:
+
+#using tree_one_outgroup where the outgroups have been pruned to leave just a single outgroup
+bsub -n 1 -W 4:00 -R "rusage[mem=5000]" "module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0; ../Dsuite/Build/Dsuite DtriosCombine \
+--tree=../pruned_tree_fbranch_input.nwk dsuites_input_PGA_scaffold0__352_contigs__length_93459789 dsuites_input_PGA_scaffold10__182_contigs__length_63177489 dsuites_input_PGA_scaffold11__203_contigs__length_63881516 dsuites_input_PGA_scaffold1__210_contigs__length_43329510 dsuites_input_PGA_scaffold12__167_contigs__length_57740044 dsuites_input_PGA_scaffold13__147_contigs__length_47256133 dsuites_input_PGA_scaffold14__173_contigs__length_55641933 dsuites_input_PGA_scaffold15__168_contigs__length_54025139 dsuites_input_PGA_scaffold16__334_contigs__length_54216998 dsuites_input_PGA_scaffold17__183_contigs__length_51949489 dsuites_input_PGA_scaffold18__164_contigs__length_59907985 dsuites_input_PGA_scaffold19__147_contigs__length_54335267 dsuites_input_PGA_scaffold20__181_contigs__length_52945597 dsuites_input_PGA_scaffold2__176_contigs__length_42764345 dsuites_input_PGA_scaffold22__199_contigs__length_52020451 dsuites_input_PGA_scaffold23__167_contigs__length_50329371 dsuites_input_PGA_scaffold24__152_contigs__length_51033154 dsuites_input_PGA_scaffold25__179_contigs__length_50922480 dsuites_input_PGA_scaffold26__192_contigs__length_48683376 dsuites_input_PGA_scaffold28__172_contigs__length_48977775 dsuites_input_PGA_scaffold29__157_contigs__length_48675208 dsuites_input_PGA_scaffold30__165_contigs__length_48446552 dsuites_input_PGA_scaffold32__183_contigs__length_44662967 dsuites_input_PGA_scaffold33__143_contigs__length_40727438 dsuites_input_PGA_scaffold3__454_contigs__length_92224161 dsuites_input_PGA_scaffold35__141_contigs__length_42009912 dsuites_input_PGA_scaffold36__136_contigs__length_43663377 dsuites_input_PGA_scaffold38__206_contigs__length_33962415 dsuites_input_PGA_scaffold39__3_contigs__length_1094305 dsuites_input_PGA_scaffold4__243_contigs__length_45591172 dsuites_input_PGA_scaffold5__223_contigs__length_43692974 dsuites_input_PGA_scaffold6__535_contigs__length_65391737 dsuites_input_PGA_scaffold7__351_contigs__length_68138733 dsuites_input_PGA_scaffold8__181_contigs__length_65193448 dsuites_input_PGA_scaffold9__196_contigs__length_60468309"
+
+bsub -n 1 -W 4:00 -R "rusage[mem=20000]" "module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0; ../Dsuite/Build/Dsuite Fbranch ../pruned_tree_fbranch_input.nwk out_combined_tree.txt > fbranch.txt"
+
+
+#now use qmaster cluster
+sconda dsuite 
+../Dsuite/utils/dtools.py fbranch.txt pruned_tree_fbranch_input.nwk
+
+
+###############################
+#now to collapse branches and run again
+make collapsed dsuite input and prune tree branches in R:
+tree <- read.tree("../99_reanalysis/RAxML/RAxML_bipartitions.99_500kb.GTRGAMMA.raxmlout")
+
+write.tree(tree)
+
+species<-c("0904", "0906", "0911", "0908", "0907", "0909", "0910",
+           "032", "033", "064", "063", "061",
+           "053", "040", "038", "0134", "039", "055",
+           "093", "019", "056", "016", "058", "0999", "017", "059", "0136",
+           "026", "029",
+           "013", "012",
+           "0123", "0131", "0121",
+           "0103", "0104",
+           "0110", "0111",
+           "0114", "0119",
+           "087", "090", "078", "076", "079", "095", "094", "096",
+           "083", "081", "0101",
+           "0100", "097", "0102",
+           "041", "043", "02", "05", "03",
+           "06", "074", "071", "010")
+
+pruned.tree<-drop.tip(tree,tree$tip.label[match(species, tree$tip.label)])
+
+write.tree(pruned.tree)
+
+pruned.tree2<-pruned.tree
+pruned.tree2$edge.length<-NULL
+pruned.tree2$node.label <- NULL
+write.tree(pruned.tree2)
+
+#save as: collapsed_tree_no_bootstraps.nwk
+
+####
+Then rename branches
+sed -i 's/034/BT_albeli/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/051/B_felchen/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0137/BT_balchen/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/027/T_profundal/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/014/T_lp/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0122/C_lp/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0106/L_profundal/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0113/L_albeli/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0118/L_balchen/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/086/ZW_balchen/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/082/ZW_albeli/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/098/ZW_felchen/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/072/BN_balchen/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0903/Outgroup/g' collapsed_tree_no_bootstraps.nwk
+
+sed -i 's/(07,044)/(07_Cpalaea_Biel_123408,BN_albeli)/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/047/047_Cbenthic_intermediate_Lucerne_28557/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/048/048_Cpelagic_intermediate_Lucerne_28559/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/050/050_Cbenthic_intermediate_Lucerne_28648/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0107/0107_Cpelagic_intermediate_Lucerne_28599/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0108/0108_Cpelagic_intermediate_Lucerne_28716/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0109/0109_Cpelagic_intermediate_Lucerne_28719/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/066/066_Calpnacherfelchen_Lucerne_26003/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/068/068_Calpnacherfelchen_Lucerne_26020/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/070/070_Calpnacherfelchen_Lucerne_26004/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/021/021_Cfatioi_Thun_123669/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/022/022_Cfatioi_Thun_123690/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/023/023_Cfatioi_Thun_123693/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/099/099_Czuerichensis_Zurich_175403/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0126/0126_Carenicolus_Constance_123462/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0127/0127_Carenicolus_Constance_123463/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0128/0128_Carenicolus_Constance_123475/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0129/0129_Calpinus_Thun_123148/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0132/0132_Cmacrophthalmus_Constance_123471/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0123458/0123458_Cmacrophthalmus_Constance_123458/g' collapsed_tree_no_bootstraps.nwk
+sed -i 's/0123470/0123470_Cmacrophthalmus_Constance_123470/g' collapsed_tree_no_bootstraps.nwk
+
+#rotate in figtree to match fig1
+(((((047_Cbenthic_intermediate_Lucerne_28557:1.0,((ZW_balchen:1.0,099_Czuerichensis_Zurich_175403:1.0):1.0,(ZW_felchen:1.0,ZW_albeli:1.0):1.0):1.0):1.0,(((((0132_Cmacrophthalmus_Constance_123471:1.0,0123470_Cmacrophthalmus_Constance_123470:1.0):1.0,((0128_Carenicolus_Constance_123475:1.0,0123458_Cmacrophthalmus_Constance_123458:1.0):1.0,(0127_Carenicolus_Constance_123463:1.0,0126_Carenicolus_Constance_123462:1.0):1.0):1.0):1.0,T_lp:1.0):1.0,C_lp:1.0):1.0,(0109_Cpelagic_intermediate_Lucerne_28719:1.0,((068:1.0,(066_Calpnacherfelchen_Lucerne_26003:1.0,(050_Cbenthic_intermediate_Lucerne_28648:1.0,L_balchen:1.0):1.0):1.0):1.0,((070_Calpnacherfelchen_Lucerne_26004:1.0,0108_Cpelagic_intermediate_Lucerne_28716:1.0):1.0,(0107_Cpelagic_intermediate_Lucerne_28599:1.0,(048_Cpelagic_intermediate_Lucerne_28559:1.0,(L_profundal:1.0,L_albeli:1.0):1.0):1.0):1.0):1.0):1.0):1.0):1.0):1.0,(T_profundal:1.0,(((023_Cfatioi_Thun_123693:1.0,(BT_albeli:1.0,021_Cfatioi_Thun_123669:1.0):1.0):1.0,(B_felchen:1.0,022_Cfatioi_Thun_123690:1.0):1.0):1.0,(0129_Calpinus_Thun_123148:1.0,BT_balchen:1.0):1.0):1.0):1.0):1.0,((07_Cpalaea_Biel_123408:1.0,BN_albeli:1.0):1.0,BN_balchen:1.0):1.0):1.0,Outgroup:1.0)
+
+#!/bin/bash
+module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0
+
+# define jobindex
+chrom_numb=${LSB_JOBINDEX}
+# find individual name corresponding with the job index number in a file
+chrom_name=$(cat /cluster/scratch/rdekayne/99_reanalysis/Dstats/chrom.list | sed -n ${chrom_numb}p)
+
+#and the start of the output dir which will be followed by the specific lake
+output_dir=/cluster/scratch/rdekayne/99_reanalysis/reviewer_comments/dstats/full_rerun_collapsed/
+
+# call dsuites tiros
+../Dsuite/Build/Dsuite Dtrios -n ${chrom_name} --tree=./collapsed_tree_no_bootstraps_rotated.nwk /cluster/scratch/rdekayne/99_reanalysis/Dstats/chromosome_vcfs/${chrom_name}.vcf.gz dsuites_input_collapsed.txt
+
+bsub -n1 -W 4:00 -J "chr_ext[1]%15" -R "rusage[mem=3000]" < ./run_Dsuites_on_chromosomes_collapsed.lsf 
+bsub -n1 -W 4:00 -J "chr_ext[2-40]%15" -R "rusage[mem=3000]" < ./run_Dsuites_on_chromosomes_collapsed.lsf 
+
+now remove the full chromosomes that are collapsed and should be empty
+rm *PGA_scaffold21__417_contigs__length_56862223*.txt
+rm *PGA_scaffold27__289_contigs__length_46671285*.txt
+rm *PGA_scaffold31__196_contigs__length_44616205*.txt
+rm *PGA_scaffold34__308_contigs__length_42609905*.txt
+rm *PGA_scaffold37__332_contigs__length_36774138*.txt
+
+#now merge output from all chromosomes (35/40)
+#combine data from all chromosomes:
+
+#using tree_one_outgroup where the outgroups have been pruned to leave just a single outgroup
+bsub -n 1 -W 4:00 -R "rusage[mem=5000]" "module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0; ../Dsuite/Build/Dsuite DtriosCombine \
+--tree=./collapsed_tree_no_bootstraps_rotated.nwk dsuites_input_collapsed_PGA_scaffold0__352_contigs__length_93459789 dsuites_input_collapsed_PGA_scaffold10__182_contigs__length_63177489 dsuites_input_collapsed_PGA_scaffold11__203_contigs__length_63881516 dsuites_input_collapsed_PGA_scaffold1__210_contigs__length_43329510 dsuites_input_collapsed_PGA_scaffold12__167_contigs__length_57740044 dsuites_input_collapsed_PGA_scaffold13__147_contigs__length_47256133 dsuites_input_collapsed_PGA_scaffold14__173_contigs__length_55641933 dsuites_input_collapsed_PGA_scaffold15__168_contigs__length_54025139 dsuites_input_collapsed_PGA_scaffold16__334_contigs__length_54216998 dsuites_input_collapsed_PGA_scaffold17__183_contigs__length_51949489 dsuites_input_collapsed_PGA_scaffold18__164_contigs__length_59907985 dsuites_input_collapsed_PGA_scaffold19__147_contigs__length_54335267 dsuites_input_collapsed_PGA_scaffold20__181_contigs__length_52945597 dsuites_input_collapsed_PGA_scaffold2__176_contigs__length_42764345 dsuites_input_collapsed_PGA_scaffold22__199_contigs__length_52020451 dsuites_input_collapsed_PGA_scaffold23__167_contigs__length_50329371 dsuites_input_collapsed_PGA_scaffold24__152_contigs__length_51033154 dsuites_input_collapsed_PGA_scaffold25__179_contigs__length_50922480 dsuites_input_collapsed_PGA_scaffold26__192_contigs__length_48683376 dsuites_input_collapsed_PGA_scaffold28__172_contigs__length_48977775 dsuites_input_collapsed_PGA_scaffold29__157_contigs__length_48675208 dsuites_input_collapsed_PGA_scaffold30__165_contigs__length_48446552 dsuites_input_collapsed_PGA_scaffold32__183_contigs__length_44662967 dsuites_input_collapsed_PGA_scaffold33__143_contigs__length_40727438 dsuites_input_collapsed_PGA_scaffold3__454_contigs__length_92224161 dsuites_input_collapsed_PGA_scaffold35__141_contigs__length_42009912 dsuites_input_collapsed_PGA_scaffold36__136_contigs__length_43663377 dsuites_input_collapsed_PGA_scaffold38__206_contigs__length_33962415 dsuites_input_collapsed_PGA_scaffold39__3_contigs__length_1094305 dsuites_input_collapsed_PGA_scaffold4__243_contigs__length_45591172 dsuites_input_collapsed_PGA_scaffold5__223_contigs__length_43692974 dsuites_input_collapsed_PGA_scaffold6__535_contigs__length_65391737 dsuites_input_collapsed_PGA_scaffold7__351_contigs__length_68138733 dsuites_input_collapsed_PGA_scaffold8__181_contigs__length_65193448 dsuites_input_collapsed_PGA_scaffold9__196_contigs__length_60468309"
+
+bsub -n 1 -W 4:00 -R "rusage[mem=20000]" "module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0; ../Dsuite/Build/Dsuite Fbranch ./collapsed_tree_no_bootstraps_rotated.nwk out_combined_tree.txt > fbranch_collapsed.txt"
+bsub -n 1 -W 4:00 -R "rusage[mem=20000]" "module load java gdc gcc/4.9.2 zlib/1.2.8 openblas/0.2.13_seq plink/1.90 samtools vcflib stacks/1.40 bowtie2/2.2.3 vcftools/0.1.14 bedtools/2.28.0; ../Dsuite/Build/Dsuite Fbranch -Z ./collapsed_tree_no_bootstraps_rotated.nwk out_combined_tree.txt > fbranch_collapsed_z.txt"
+
+
+#now use qmaster cluster
+sconda dsuite 
+../Dsuite/utils/dtools.py fbranch_collapsed.txt ./collapsed_tree_no_bootstraps_rotated.nwk
+../Dsuite/utils/dtools.py z_scores.txt ./collapsed_tree_no_bootstraps_rotated.nwk
+
+#save everything past Z-scores: as z_scores.txt
+
+tail -n 69 fbranch_collapsed_z.txt > z_scores.txt
+
+../Dsuite/utils/dtools.py z_scores.txt ./collapsed_tree_no_bootstraps_rotated.nwk
+cp fbranch.png fbranch_collapsed_zscore.png
+cp fbranch.svg fbranch_collapsed_zscore.svg
+
+###with threshold
+
+#test - convert z-scores in R
+
+zscores <- read.csv("Dropbox/RishiMAC/99_reanalysis/reviewer_responses/dsuite/z_scores.txt", sep = "\t")
+
+header <- zscores[,1:2]
+             
+scores <- zscores[,3:ncol(zscores)]
+
+newscores <- as.data.frame(c())
+for(i in 1:nrow(scores)){
+  for(j in 1:ncol(scores)){
+    if(scores[i,j] != 'NaN'){
+      if(as.numeric(scores[i,j])<3){
+        newscores[i,j] <- 0
+      }
+      if(as.numeric(scores[i,j])>=3){
+        newscores[i,j] <- 0.99
+      }
+    }
+    if(scores[i,j] == 'NaN'){
+      newscores[i,j] <- "nan"
+    }
+  }
+}
+
+all_new <- cbind(header, newscores)
+
+colnames(all_new) <- colnames(zscores)
+write.csv(all_new, "Dropbox/RishiMAC/99_reanalysis/reviewer_responses/dsuite/all_new_zscore.txt", quote=FALSE, row.names=FALSE)
+
+
+##back in bash:
+#then run: 
+#get rid of 'X' in header from read.csv 
+
+sed -i 's/X//g' all_new_zscore.txt
+../Dsuite/utils/dtools.py all_new_zscore.txt ./collapsed_tree_no_bootstraps_rotated.nwk
+cp fbranch.png fbranch_collapsed_zscore_binary.png
+cp fbranch.svg fbranch_collapsed_zscore_binary.svg
+
+#now with sig zscore cutoff i.e. >4.46
+scp all_new_zscore_sig.txt qmaster:/data/martin/genomics/analyses/Danaus_genome/Dchry2/test
+
+sed -i 's/X//g' all_new_zscore_sig.txt
+../Dsuite/utils/dtools.py all_new_zscore_sig.txt ./collapsed_tree_no_bootstraps_rotated.nwk
+cp fbranch.png fbranch_collapsed_zscore_binary_sig.png
+cp fbranch.svg fbranch_collapsed_zscore_binary_sig.svg
+
 ##########################
 ##########################
 #	5. GWAS
