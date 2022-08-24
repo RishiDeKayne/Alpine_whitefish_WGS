@@ -1,4 +1,4 @@
-This repository contains all code associated with De-Kayne et al. XXXX
+This repository contains all code associated with De-Kayne et al. 2022 - https://www.nature.com/articles/s41467-022-32181-8
 
 This repository has a DOI - 
 [![DOI](https://zenodo.org/badge/389911930.svg)](https://zenodo.org/badge/latestdoi/389911930)
